@@ -1,0 +1,110 @@
+# PyJa
+
+PyJaは、Javaをベースに、Pythonのようなインデントによる構造表現（オフサイドルール）を取り入れた、新しいプログラミング言語（トランスパイラ）のプロトタイプです。
+
+「Javaの堅牢性と豊富なエコシステムを活かしつつ、Pythonのようにスッキリとしたコードを書きたい」というアイデアから生まれました。
+
+---
+
+## 主な特徴
+
+1.  **インデントによるブロック表現**:
+    *   中括弧 `{ }` は不要です。半角スペース4つのインデントの深さでコードの構造（クラス、メソッド、ループ、分岐など）を表現します。
+2.  **セミコロン `;` の自動補完**:
+    *   ステートメントの末尾のセミコロンは省略可能です。トランスパイラが自動的に補完します。
+3.  **条件式の括弧 `( )` の省略**:
+    *   `if` や `for`、`while` などの条件式を囲む括弧 `( )` を省略して書くことができます。
+4.  **丸括弧内での複数行記述**:
+    *   メソッドの引数リストなど、括弧の内部であれば自由に改行して複数行にわたるコードを書くことができます。
+5.  **厳密なインデント検証**:
+    *   タブ文字の混入や、4の倍数以外のスペースインデント、不正なデデント（戻りインデント）を検知し、コンパイル前にエラーを出力します。
+
+---
+
+## 動作環境
+
+*   **OS**: Windows, macOS, Linux (Javaが動作するすべての環境)
+*   **Java**: JDK (Java Development Kit) 11 以上
+
+---
+
+## サンプルコード (`Sample.pyja`)
+
+```java
+import java.util.ArrayList
+import java.util.List
+
+class Sample
+    public static void main(String[] args)
+        System.out.println("--- PyJa 動作テスト ---")
+        
+        int limit = 5
+        for int i = 0; i < limit; i++
+            System.out.println("ループカウンタ: " + i)
+            
+        int x = 10
+        if x > 5
+            System.out.println("xは5より大きいです")
+            if x == 10
+                System.out.println("xはちょうど10です")
+        else
+            System.out.println("xは5以下です")
+            
+        // 複数行にわたるメソッド呼び出し
+        printMessage(
+            "Hello, " +
+            "World from PyJa!"
+        )
+
+    public static void printMessage(String msg)
+        System.out.println("メッセージ: " + msg)
+```
+
+---
+
+## 使い方
+
+### Windows の場合
+
+#### 1. コンパイル
+`pyjac.bat` を使用して `.pyja` ファイルをコンパイルします。内部で `.java` ファイルの生成と、`javac` によるコンパイルが自動で行われます。
+
+```cmd
+.\pyjac.bat Sample.pyja
+```
+
+#### 2. プログラムの実行
+`pyja.bat` を使用して、生成されたクラスファイルを実行します。
+
+```cmd
+.\pyja.bat Sample
+```
+
+---
+
+### macOS / Linux の場合
+
+#### 0. 実行権限の付与 (初回のみ)
+```bash
+chmod +x pyjac pyja
+```
+
+#### 1. コンパイル
+`pyjac` を使用して `.pyja` ファイルをコンパイルします。
+
+```bash
+./pyjac Sample.pyja
+```
+
+#### 2. プログラムの実行
+`pyja` を使用して実行します。
+
+```bash
+./pyja Sample
+```
+
+---
+
+## ライセンス
+
+[MIT License](LICENSE)

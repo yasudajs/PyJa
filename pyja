@@ -1,0 +1,9 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Error: Class name is required."
+    echo "Usage: ./pyja <ClassName> [args...]"
+    exit 1
+fi
+
+# 全引数をそのまま java に渡して実行
+java "$@"

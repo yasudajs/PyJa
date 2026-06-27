@@ -1,0 +1,26 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Error: Input file path is required."
+    echo "Usage: ./pyjac <FileName.pyja>"
+    exit 1
+fi
+
+# このスクリプトがあるディレクトリの絶対パスを取得
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# トランスパイル実行
+java "$DIR/PyJaConverter.java" "$1"
+if [ $? -ne 0 ]; then
+    exit 1
+fi
+
+# 生成されたJavaファイルをコンパイルするためにパスを解析
+filepath=$(dirname -- "$1")
+filename=$(basename -- "$1")
+classname="${filename%.*}"
+
+# javacでコンパイル
+javac "$filepath/$classname.java"
+if [ $? -ne 0 ]; then
+    exit 1
+fi
