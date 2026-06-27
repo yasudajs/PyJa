@@ -1,0 +1,27 @@
+import java.util.ArrayList
+import java.util.List
+
+class Sample
+    public static void main(String[] args)
+        System.out.println("--- PyJa 動作テスト ---")
+        
+        int limit = 5
+        for int i = 0; i < limit; i++
+            System.out.println("ループカウンタ: " + i)
+            
+        int x = 10
+        if x > 5
+            System.out.println("xは5より大きいです")
+            if x == 10
+                System.out.println("xはちょうど10です")
+        else
+            System.out.println("xは5以下です")
+            
+        // 複数行にわたるメソッド呼び出し（丸括弧のテスト）
+        printMessage(
+            "Hello, " +
+            "World from PyJa!"
+        )
+
+    public static void printMessage(String msg)
+        System.out.println("メッセージ: " + msg)
