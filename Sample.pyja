@@ -4,11 +4,13 @@ import java.util.List
 class Sample
     public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")
-        
+
+        // --- 基本的なループ ---
         int limit = 5
         for int i = 0; i < limit; i++
             System.out.println("ループカウンタ: " + i)
-            
+
+        // --- 条件分岐 ---
         int x = 10
         if x > 5
             System.out.println("xは5より大きいです")
@@ -16,8 +18,17 @@ class Sample
                 System.out.println("xはちょうど10です")
         else
             System.out.println("xは5以下です")
-            
-        // 複数行にわたるメソッド呼び出し（丸括弧のテスト）
+
+        // --- リストの使用例 ---
+        List<String> languages = new ArrayList<>()
+        languages.add("Java")
+        languages.add("Python")
+        languages.add("PyJa")
+
+        for String lang : languages
+            System.out.println("言語: " + lang)
+
+        // --- 複数行にわたるメソッド呼び出し ---
         printMessage(
             "Hello, " +
             "World from PyJa!"
