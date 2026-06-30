@@ -117,7 +117,7 @@ import java.util.ArrayList
 import java.util.List
 
 class Sample
-    <method>
+<method>
     public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")
 
