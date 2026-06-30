@@ -18,6 +18,49 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
     *   メソッドの引数リストなど、括弧の内部であれば自由に改行して複数行にわたるコードを書くことができます。
 5.  **厳密なインデント検証**:
     *   タブ文字の混入や、4の倍数以外のスペースインデント、不正なデデント（戻りインデント）を検知し、コンパイル前にエラーを出力します。
+6.  **`cls` / `ins` / `new` キーワードによる明示的なメンバー宣言**:
+    *   Javaの `static` を廃止し、より直感的なキーワードで記述します。
+    *   `cls` ：クラスに属するメンバー（Javaの `static` に変換）
+    *   `ins` ：インスタンスに属するメンバー（Javaでは修飾子なしに変換）
+    *   `new` ：コンストラクタ（インスタンス生成時に呼ばれるメソッド）
+
+---
+
+## 修飾子キーワード一覧
+
+| PyJaキーワード | 意味 | Javaへの変換 |
+|---|---|---|
+| `cls` | クラスに属するメンバー（フィールド・メソッド・初期化ブロック） | `static` |
+| `ins` | インスタンスに属するメンバー（フィールド・メソッド） | 削除（Javaでは不要） |
+| `new` | コンストラクタ | 削除（クラス名と一致で識別） |
+
+### 記述例
+
+```java
+class Counter
+    // クラスフィールド（cls必須）
+    private cls int total = 0
+
+    // クラス初期化ブロック
+    cls
+        total = 0
+
+    // インスタンスフィールド（ins必須）
+    private ins int count
+
+    // コンストラクタ（new必須）
+    public new Counter(int start)
+        this.count = start
+        total++
+
+    // インスタンスメソッド（ins必須）
+    public ins int getCount()
+        return count
+
+    // クラスメソッド（cls必須）
+    public cls int getTotal()
+        return total
+```
 
 ---
 
@@ -40,6 +83,8 @@ cd PyJa
 ### 2. IDE拡張機能のインストール（任意）
 
 VS Code系のIDEをお使いの場合、PyJa専用のシンタックスハイライト（色付け）とファイルアイコンを有効にするための拡張機能をインストールできます。
+
+対応IDE：VS Code、Antigravity IDE、Cursor、Windsurf、VS Codium
 
 **Windows:**
 ```cmd
@@ -65,7 +110,7 @@ import java.util.ArrayList
 import java.util.List
 
 class Sample
-    public static void main(String[] args)
+    public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")
         
         int limit = 5
@@ -86,7 +131,7 @@ class Sample
             "World from PyJa!"
         )
 
-    public static void printMessage(String msg)
+    public cls void printMessage(String msg)
         System.out.println("メッセージ: " + msg)
 ```
 

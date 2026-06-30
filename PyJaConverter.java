@@ -4,21 +4,33 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 
 public class PyJaConverter {
 
+    // Java の修飾子キーワード（アクセス修飾子 + その他）
+    private static final Set<String> JAVA_MODIFIERS = new HashSet<>(Arrays.asList(
+        "public", "private", "protected",
+        "abstract", "final", "synchronized", "volatile", "transient", "native", "strictfp", "default"
+    ));
+
+    // PyJa 固有の修飾子キーワード
+    private static final Set<String> PYJA_LEVEL_KEYWORDS = new HashSet<>(Arrays.asList("cls", "ins", "new"));
+
     public static void main(String[] args) {
         if (args.length < 1) {
-            System.err.println("エラー: 入力ファイルを指定してください。");
-            System.err.println("使用法: java PyJaConverter <ファイル名.pyja>");
+            System.err.println("Error: Please specify an input file.");
+            System.err.println("Usage: java PyJaConverter <filename.pyja>");
             System.exit(1);
         }
 
         String inputFilePath = args[0];
         if (!inputFilePath.endsWith(".pyja")) {
-            System.err.println("エラー: 入力ファイルは .pyja 拡張子である必要があります。");
+            System.err.println("Error: Input file must have a .pyja extension.");
             System.exit(1);
         }
 
@@ -26,14 +38,14 @@ public class PyJaConverter {
 
         try {
             List<LineInfo> lines = readAndPreprocess(inputFilePath);
-            List<String> outputLines = transpile(lines);
+            List<String> outputLines = transpile(lines, inputFilePath);
             writeOutput(outputFilePath, outputLines);
-            System.out.println("変換成功: " + inputFilePath + " -> " + outputFilePath);
+            System.out.println("Success: " + inputFilePath + " -> " + outputFilePath);
         } catch (PyJaException e) {
-            System.err.println("コンパイルエラー (" + inputFilePath + ":" + e.getLineNumber() + "): " + e.getMessage());
+            System.err.println("Compile error (" + inputFilePath + ":" + e.getLineNumber() + "): " + e.getMessage());
             System.exit(1);
         } catch (IOException e) {
-            System.err.println("ファイルエラー: " + e.getMessage());
+            System.err.println("File error: " + e.getMessage());
             System.exit(1);
         }
     }
@@ -46,11 +58,11 @@ public class PyJaConverter {
         boolean isEmpty;
         boolean isComment;
         boolean inTripleQuote;
-        int parenBalance; // この行単体での括弧の増減
-        int accumulatedParenBalance; // この行が終わった時点での累積括弧バランス
-        
-        // 変換用のフラグ・テキスト
+        int parenBalance;
+        int accumulatedParenBalance;
+
         boolean isBlockStart = false;
+        boolean isClsBlock = false;  // cls 単独ブロック（静的初期化ブロック）
         String processedText;
 
         LineInfo(int lineNumber, String originalText) {
@@ -60,7 +72,6 @@ public class PyJaConverter {
         }
     }
 
-    // カスタム例外クラス
     static class PyJaException extends Exception {
         private final int lineNumber;
 
@@ -77,7 +88,7 @@ public class PyJaConverter {
     // 1パス目: 行の読み込みとメタデータの解析
     private static List<LineInfo> readAndPreprocess(String filePath) throws IOException, PyJaException {
         List<LineInfo> lines = new ArrayList<>();
-        
+
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String lineText;
             int lineNumber = 0;
@@ -87,10 +98,10 @@ public class PyJaConverter {
             while ((lineText = reader.readLine()) != null) {
                 lineNumber++;
                 LineInfo line = new LineInfo(lineNumber, lineText);
-                
+
                 // タブ文字のチェック
                 if (lineText.contains("\t")) {
-                    throw new PyJaException(lineNumber, "タブ文字（\\t）は使用できません。半角スペース4つを使用してください。");
+                    throw new PyJaException(lineNumber, "Tab characters are not allowed. Use 4 spaces for indentation.");
                 }
 
                 // インデントサイズの計算
@@ -100,14 +111,11 @@ public class PyJaConverter {
                 }
                 line.indentSize = spaces;
 
-                // トリミング後の文字列
                 String trimmed = lineText.trim();
                 line.trimmedText = trimmed;
-                
+
                 // トリプルクォートのチェック
-                // 簡易的な切り替え判定 (複数行文字列のサポート用)
                 if (trimmed.contains("\"\"\"")) {
-                    // 行内に奇数個の """ があれば状態を反転
                     int count = countOccurrences(trimmed, "\"\"\"");
                     if (count % 2 != 0) {
                         inTripleQuote = !inTripleQuote;
@@ -115,11 +123,9 @@ public class PyJaConverter {
                 }
                 line.inTripleQuote = inTripleQuote;
 
-                // 空行またはコメント行の判定
                 line.isEmpty = trimmed.isEmpty();
                 line.isComment = trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*");
 
-                // 括弧のバランス計算（リテラルやコメントを除外した簡易判定）
                 if (!line.isEmpty && !line.isComment && !line.inTripleQuote) {
                     int bal = calculateParenBalance(trimmed);
                     line.parenBalance = bal;
@@ -133,22 +139,19 @@ public class PyJaConverter {
         return lines;
     }
 
-    // 2パス目: トランスパイル処理（インデントチェックとJavaコード生成）
-    private static List<String> transpile(List<LineInfo> lines) throws PyJaException {
+    // 2パス目: トランスパイル処理
+    private static List<String> transpile(List<LineInfo> lines, String inputFilePath) throws PyJaException {
         List<String> output = new ArrayList<>();
         Stack<Integer> indentStack = new Stack<>();
         indentStack.push(0);
 
-        // 有効な行（空行、コメント、括弧の継続行、トリプルクォート内を除く）のインデックスをリスト化
         List<Integer> validLineIndices = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             LineInfo line = lines.get(i);
-            
-            // 括弧が開いている間の行は、ブロックの開始/終了の判定対象外
+
             boolean isParenContinued = false;
             if (i > 0) {
                 LineInfo prevLine = lines.get(i - 1);
-                // 前の行の時点で括弧が開いていれば継続行とみなす
                 if (prevLine.accumulatedParenBalance > 0) {
                     isParenContinued = true;
                 }
@@ -159,95 +162,93 @@ public class PyJaConverter {
             }
         }
 
-        // 各有効行に対してインデント検証とブロック開始判定を行う
         for (int k = 0; k < validLineIndices.size(); k++) {
             int currentIdx = validLineIndices.get(k);
             LineInfo currentLine = lines.get(currentIdx);
-            
+
             int curIndent = currentLine.indentSize;
-            
-            // インデントが4の倍数であることを確認
+
             if (curIndent % 4 != 0) {
-                throw new PyJaException(currentLine.lineNumber, 
-                    "インデントが正しくありません: " + curIndent + " スペース（4の倍数である必要があります）。");
+                throw new PyJaException(currentLine.lineNumber,
+                    "Incorrect indentation: " + curIndent + " spaces (must be a multiple of 4).");
             }
+
+            // static の直接使用チェック
+            validateNoDirectStatic(currentLine);
+
+            // cls と ins の同時使用チェック
+            validateNoDualLevelKeyword(currentLine);
 
             int prevIndent = indentStack.peek();
 
             if (curIndent > prevIndent) {
-                // インデントが深くなった場合
                 if (curIndent - prevIndent > 4) {
-                    throw new PyJaException(currentLine.lineNumber, 
-                        "インデントが一気に深くなりすぎています。インデントは1レベル（4スペース）ずつ深くしてください。");
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Indentation increased too much at once. Increase by 1 level (4 spaces) at a time.");
                 }
-                
-                // 直前の有効行はブロック開始行のはずであるため、マークする
+
                 if (k > 0) {
                     int prevIdx = validLineIndices.get(k - 1);
-                    lines.get(prevIdx).isBlockStart = true;
+                    LineInfo prevLine = lines.get(prevIdx);
+                    prevLine.isBlockStart = true;
+                    // cls 単独行（"cls" だけ）の検出
+                    if (prevLine.trimmedText.equals("cls")) {
+                        prevLine.isClsBlock = true;
+                    }
                 }
                 indentStack.push(curIndent);
 
             } else if (curIndent < prevIndent) {
-                // インデントが浅くなった場合（デデント）
-                // スタックのトップが現在のインデントと一致するまでポップし、対応する `}` を生成用のマークとして処理する
                 int popCount = 0;
                 while (indentStack.peek() > curIndent) {
                     indentStack.pop();
                     popCount++;
                 }
 
-                // 戻り先が過去のインデントレベルと一致しない場合はエラー
                 if (indentStack.peek() != curIndent) {
-                    throw new PyJaException(currentLine.lineNumber, 
-                        "インデントの戻り先（デデント）が不正です。親ブロックのインデントレベルと一致していません。");
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Invalid dedent. Indentation does not match any previous level.");
                 }
 
-                // 現在の有効行の直前に、ポップした数だけの閉じカッコ `}` を挿入するためのマーク
                 currentLine.processedText = repeatString(" ", indentStack.peek()) + repeatString("}", popCount) + "\n" + currentLine.originalText;
             }
         }
 
-        // ファイル末尾で残ったインデントレベルをすべて閉じる
+        // ファイル末尾の閉じカッコ処理
         int finalPopCount = 0;
         while (indentStack.peek() > 0) {
             indentStack.pop();
             finalPopCount++;
         }
 
-        // Javaコードへの文法変換
+        // Java コードへの変換出力
         for (int i = 0; i < lines.size(); i++) {
             LineInfo line = lines.get(i);
-            
+
             if (line.isEmpty || line.isComment || line.inTripleQuote) {
                 output.add(line.originalText);
                 continue;
             }
 
-            // 前のステップでデデント処理により書き換えられた内容があればそれを使用
             String text = line.processedText;
-            
-            // 構文の変換 (if, while, for の括弧補完など)
             String convertedTrimmed = convertSyntax(line.trimmedText);
 
-            // ブロック開始行であれば末尾に `{` を追加、そうでなければ必要に応じて `;` を追加
             if (line.isBlockStart) {
-                convertedTrimmed = convertedTrimmed + " {";
+                if (line.isClsBlock) {
+                    // cls 単独ブロック → static {
+                    convertedTrimmed = "static {";
+                } else {
+                    convertedTrimmed = convertedTrimmed + " {";
+                }
             } else {
-                // セミコロンの自動挿入判定
-                // 括弧がすべて閉じられており、セミコロンが必要なステートメントであれば挿入する
                 if (line.accumulatedParenBalance == 0 && needsSemicolon(convertedTrimmed)) {
                     convertedTrimmed = convertedTrimmed + ";";
                 }
             }
 
-            // インデントを再適用して出力行を作成
             String indentStr = repeatString(" ", line.indentSize);
-            
-            // すでにデデント用の閉じカッコ `}` が付与されている場合は、インデントの再適用を調整
+
             if (!text.equals(line.originalText)) {
-                // すでに `}` が先頭に追加されている特殊フォーマットなので、
-                // processedText内の最終行（元のコード部分）に変換した内容をマッピングする
                 String[] parts = text.split("\n", -1);
                 StringBuilder sb = new StringBuilder();
                 for (int j = 0; j < parts.length - 1; j++) {
@@ -260,7 +261,6 @@ public class PyJaConverter {
             }
         }
 
-        // ファイル末尾の閉じカッコを追加
         if (finalPopCount > 0) {
             for (int i = finalPopCount - 1; i >= 0; i--) {
                 output.add(repeatString("    ", i) + "}");
@@ -270,8 +270,46 @@ public class PyJaConverter {
         return output;
     }
 
-    // Javaの文法構造へ変換 (if, for, while の条件括弧の補完など)
+    // static の直接使用を禁止
+    private static void validateNoDirectStatic(LineInfo line) throws PyJaException {
+        String trimmed = line.trimmedText;
+        // import static はOK（Javaの static import）
+        if (trimmed.startsWith("import ")) return;
+        // トークン分割して "static" が含まれているかチェック
+        String[] tokens = trimmed.split("\\s+");
+        for (String token : tokens) {
+            if (token.equals("static")) {
+                throw new PyJaException(line.lineNumber,
+                    "'static' cannot be used directly in PyJa. Use 'cls' instead.");
+            }
+        }
+    }
+
+    // cls と ins の同時使用を禁止
+    private static void validateNoDualLevelKeyword(LineInfo line) throws PyJaException {
+        String trimmed = line.trimmedText;
+        String[] tokens = trimmed.split("\\s+");
+        boolean hasCls = false;
+        boolean hasIns = false;
+        boolean hasNew = false;
+        for (String token : tokens) {
+            if (token.equals("cls")) hasCls = true;
+            if (token.equals("ins")) hasIns = true;
+            if (token.equals("new")) hasNew = true;
+        }
+        int count = (hasCls ? 1 : 0) + (hasIns ? 1 : 0) + (hasNew ? 1 : 0);
+        if (count > 1) {
+            throw new PyJaException(line.lineNumber,
+                "Cannot use 'cls', 'ins', and 'new' in combination. Use only one.");
+        }
+    }
+
+    // Java 構文への変換
     private static String convertSyntax(String trimmed) {
+        // cls / ins / new の修飾子変換
+        trimmed = convertLevelKeywords(trimmed);
+
+        // if / else if / while / for / catch の括弧補完
         if (trimmed.startsWith("if ") && !trimmed.startsWith("if (")) {
             String condition = trimmed.substring(3).trim();
             return "if (" + condition + ")";
@@ -295,38 +333,93 @@ public class PyJaConverter {
         return trimmed;
     }
 
-    // セミコロン `;` を付与すべきか判定するルール
+    /**
+     * PyJa の cls / ins / new キーワードを Java の修飾子に変換する。
+     *
+     * 変換ルール:
+     *   cls → static（に置換）
+     *   ins → 削除
+     *   new → 削除
+     *
+     * トークンを左から右にスキャンし、修飾子位置に現れた場合のみ変換する。
+     * 修飾子位置とは: public/private/protected やその他修飾子が続く位置。
+     */
+    private static String convertLevelKeywords(String trimmed) {
+        String[] tokens = trimmed.split("\\s+", -1);
+        List<String> result = new ArrayList<>();
+        boolean inModifierRegion = true; // 先頭から修飾子が続く領域
+
+        for (int i = 0; i < tokens.length; i++) {
+            String token = tokens[i];
+
+            if (inModifierRegion) {
+                if (token.equals("cls")) {
+                    result.add("static");
+                    continue;
+                } else if (token.equals("ins") || (token.equals("new") && isConstructorNew(tokens, i))) {
+                    // ins は削除、new がコンストラクタ文脈なら削除
+                    continue;
+                } else if (JAVA_MODIFIERS.contains(token) || token.equals("static")) {
+                    result.add(token);
+                    continue;
+                } else {
+                    // 修飾子でないトークンが来たら修飾子領域を抜ける
+                    inModifierRegion = false;
+                    result.add(token);
+                }
+            } else {
+                result.add(token);
+            }
+        }
+
+        return String.join(" ", result);
+    }
+
+    /**
+     * "new" トークンがコンストラクタ宣言の修飾子かどうかを判定する。
+     * コンストラクタ宣言の文脈: 修飾子列の中にある "new" であること。
+     * 式の中の new（例: new Counter()）は inModifierRegion=false の後に来るため除外される。
+     */
+    private static boolean isConstructorNew(String[] tokens, int newIndex) {
+        // newIndex より前のトークンが全て修飾子であれば、コンストラクタ宣言の new
+        for (int i = 0; i < newIndex; i++) {
+            if (!JAVA_MODIFIERS.contains(tokens[i]) && !PYJA_LEVEL_KEYWORDS.contains(tokens[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // セミコロンを付与すべきか判定
     private static boolean needsSemicolon(String trimmed) {
         if (trimmed.isEmpty()) return false;
-        
-        // すでに記号で終わっている場合は不要
+
         char lastChar = trimmed.charAt(trimmed.length() - 1);
         if (lastChar == ';' || lastChar == '{' || lastChar == '}') {
             return false;
         }
 
-        // 制御キーワードや定義キーワードで始まっている場合は不要
         if (trimmed.startsWith("class ") || trimmed.startsWith("interface ") || trimmed.startsWith("enum ")) {
             return false;
         }
-        if (trimmed.startsWith("if ") || trimmed.equals("else") || trimmed.startsWith("else ") || 
+        if (trimmed.startsWith("if ") || trimmed.equals("else") || trimmed.startsWith("else ") ||
             trimmed.startsWith("while ") || trimmed.startsWith("for ") || trimmed.startsWith("switch ")) {
             return false;
         }
         if (trimmed.startsWith("try") || trimmed.startsWith("catch ") || trimmed.equals("finally") || trimmed.startsWith("finally ")) {
             return false;
         }
-        if (trimmed.startsWith("@")) { // アノテーション
+        if (trimmed.startsWith("@")) {
             return false;
         }
-        if (trimmed.startsWith("static ") && trimmed.endsWith("{")) { // スタティックブロック
+        // cls ブロック / static ブロック
+        if (trimmed.equals("static") || trimmed.equals("static {") || trimmed.equals("cls")) {
             return false;
         }
 
         return true;
     }
 
-    // 括弧のバランスを計算する (開き括弧で +1, 閉じ括弧で -1)
     private static int calculateParenBalance(String text) {
         int balance = 0;
         boolean inString = false;
@@ -361,7 +454,6 @@ public class PyJaConverter {
         return balance;
     }
 
-    // 特定文字列の出現回数をカウント
     private static int countOccurrences(String text, String target) {
         int count = 0;
         int idx = 0;
@@ -372,7 +464,6 @@ public class PyJaConverter {
         return count;
     }
 
-    // 文字列の繰り返し
     private static String repeatString(String str, int count) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {
@@ -381,7 +472,6 @@ public class PyJaConverter {
         return sb.toString();
     }
 
-    // 変換結果をファイルに書き出す
     private static void writeOutput(String filePath, List<String> lines) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
             for (String line : lines) {

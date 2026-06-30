@@ -2,7 +2,7 @@ import java.util.ArrayList
 import java.util.List
 
 class Sample
-    public static void main(String[] args)
+    public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")
         
         int limit = 5
@@ -23,5 +23,5 @@ class Sample
             "World from PyJa!"
         )
 
-    public static void printMessage(String msg)
+    public cls void printMessage(String msg)
         System.out.println("メッセージ: " + msg)
