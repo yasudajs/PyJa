@@ -21,6 +21,27 @@ public class PyJaConverter {
     // PyJa 固有の修飾子キーワード
     private static final Set<String> PYJA_LEVEL_KEYWORDS = new HashSet<>(Arrays.asList("cls", "ins", "new"));
 
+    enum ContextType {
+        GLOBAL,
+        CLASS_BODY,
+        FIELD_SECTION,
+        CONST_SECTION,
+        METHOD_SECTION,
+        METHOD_BODY,
+        CONTROL_FLOW
+    }
+
+    static class ContextEntry {
+        ContextType type;
+        int indent;
+        int lastSectionOrder = 0; // 1: <field>, 2: <const>, 3: <method>
+
+        ContextEntry(ContextType type, int indent) {
+            this.type = type;
+            this.indent = indent;
+        }
+    }
+
     public static void main(String[] args) {
         if (args.length < 1) {
             System.err.println("Error: Please specify an input file.");
@@ -62,6 +83,7 @@ public class PyJaConverter {
         int accumulatedParenBalance;
 
         boolean isBlockStart = false;
+        boolean isSectionHeader = false;
         boolean isClsBlock = false;  // cls 単独ブロック（静的初期化ブロック）
         String processedText;
 
@@ -104,15 +126,25 @@ public class PyJaConverter {
                     throw new PyJaException(lineNumber, "Tab characters are not allowed. Use 4 spaces for indentation.");
                 }
 
+                String trimmed = lineText.trim();
+                // BOM のトリム
+                if (lineNumber == 1 && trimmed.startsWith("\uFEFF")) {
+                    trimmed = trimmed.substring(1).trim();
+                }
+                line.trimmedText = trimmed;
+
                 // インデントサイズの計算
                 int spaces = 0;
                 while (spaces < lineText.length() && lineText.charAt(spaces) == ' ') {
                     spaces++;
                 }
-                line.indentSize = spaces;
-
-                String trimmed = lineText.trim();
-                line.trimmedText = trimmed;
+                
+                // セクションタグの場合、インデントサイズを強制的に 4 にする
+                if (trimmed.equals("<field>") || trimmed.equals("<const>") || trimmed.equals("<method>")) {
+                    line.indentSize = 4;
+                } else {
+                    line.indentSize = spaces;
+                }
 
                 // トリプルクォートのチェック
                 if (trimmed.contains("\"\"\"")) {
@@ -142,8 +174,8 @@ public class PyJaConverter {
     // 2パス目: トランスパイル処理
     private static List<String> transpile(List<LineInfo> lines, String inputFilePath) throws PyJaException {
         List<String> output = new ArrayList<>();
-        Stack<Integer> indentStack = new Stack<>();
-        indentStack.push(0);
+        Stack<ContextEntry> contextStack = new Stack<>();
+        contextStack.push(new ContextEntry(ContextType.GLOBAL, 0));
 
         List<Integer> validLineIndices = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
@@ -167,6 +199,8 @@ public class PyJaConverter {
             LineInfo currentLine = lines.get(currentIdx);
 
             int curIndent = currentLine.indentSize;
+            String trimmed = currentLine.trimmedText;
+
 
             if (curIndent % 4 != 0) {
                 throw new PyJaException(currentLine.lineNumber,
@@ -179,10 +213,11 @@ public class PyJaConverter {
             // cls と ins の同時使用チェック
             validateNoDualLevelKeyword(currentLine);
 
-            int prevIndent = indentStack.peek();
+            ContextEntry activeContext = contextStack.peek();
 
-            if (curIndent > prevIndent) {
-                if (curIndent - prevIndent > 4) {
+            // インデントが深くなった場合 (ブロックの開始)
+            if (curIndent > activeContext.indent) {
+                if (curIndent - activeContext.indent > 4) {
                     throw new PyJaException(currentLine.lineNumber,
                         "Indentation increased too much at once. Increase by 1 level (4 spaces) at a time.");
                 }
@@ -190,35 +225,169 @@ public class PyJaConverter {
                 if (k > 0) {
                     int prevIdx = validLineIndices.get(k - 1);
                     LineInfo prevLine = lines.get(prevIdx);
-                    prevLine.isBlockStart = true;
-                    // cls 単独行（"cls" だけ）の検出
-                    if (prevLine.trimmedText.equals("cls")) {
-                        prevLine.isClsBlock = true;
+                    String prevTrimmed = prevLine.trimmedText;
+
+                    ContextType nextType;
+                    boolean prevIsBlockStart = true;
+                    boolean prevIsSectionHeader = false;
+                    boolean prevIsClsBlock = false;
+
+                    if (activeContext.type == ContextType.GLOBAL) {
+                        if (isClassDeclaration(prevTrimmed)) {
+                            nextType = ContextType.CLASS_BODY;
+                        } else {
+                            throw new PyJaException(prevLine.lineNumber, "Only class declarations are allowed at the global scope.");
+                        }
+                    } else if (activeContext.type == ContextType.CLASS_BODY) {
+                        if (prevTrimmed.equals("<field>")) {
+                            nextType = ContextType.FIELD_SECTION;
+                            prevIsBlockStart = false;
+                            prevIsSectionHeader = true;
+                        } else if (prevTrimmed.equals("<const>")) {
+                            nextType = ContextType.CONST_SECTION;
+                            prevIsBlockStart = false;
+                            prevIsSectionHeader = true;
+                        } else if (prevTrimmed.equals("<method>")) {
+                            nextType = ContextType.METHOD_SECTION;
+                            prevIsBlockStart = false;
+                            prevIsSectionHeader = true;
+                        } else {
+                            throw new PyJaException(prevLine.lineNumber, "Only '<field>', '<const>', or '<method>' sections are allowed inside a class body.");
+                        }
+                    } else if (activeContext.type == ContextType.FIELD_SECTION) {
+                        if (prevTrimmed.equals("cls")) {
+                            nextType = ContextType.METHOD_BODY;
+                            prevIsClsBlock = true;
+                        } else {
+                            throw new PyJaException(prevLine.lineNumber, "Only 'cls' block is allowed to start a block in '<field>' section.");
+                        }
+                    } else if (activeContext.type == ContextType.CONST_SECTION) {
+                        if (!hasKeyword(prevTrimmed, "new")) {
+                            throw new PyJaException(prevLine.lineNumber, "Constructor declaration requires 'new' keyword.");
+                        }
+                        nextType = ContextType.METHOD_BODY;
+                    } else if (activeContext.type == ContextType.METHOD_SECTION) {
+                        if (!hasKeyword(prevTrimmed, "cls") && !hasKeyword(prevTrimmed, "ins")) {
+                            throw new PyJaException(prevLine.lineNumber, "Method declaration requires 'cls' or 'ins' keyword.");
+                        }
+                        nextType = ContextType.METHOD_BODY;
+                    } else if (activeContext.type == ContextType.METHOD_BODY || activeContext.type == ContextType.CONTROL_FLOW) {
+                        nextType = ContextType.CONTROL_FLOW;
+                    } else {
+                        throw new PyJaException(prevLine.lineNumber, "Unexpected block start.");
+                    }
+
+                    prevLine.isBlockStart = prevIsBlockStart;
+                    prevLine.isSectionHeader = prevIsSectionHeader;
+                    prevLine.isClsBlock = prevIsClsBlock;
+
+                    contextStack.push(new ContextEntry(nextType, curIndent));
+                    activeContext = contextStack.peek();
+                }
+            } else if (curIndent < activeContext.indent) {
+                // インデントが浅くなった場合 (デデント)
+                List<Integer> closeIndents = new ArrayList<>();
+                while (contextStack.peek().indent > curIndent) {
+                    ContextEntry popped = contextStack.pop();
+                    if (popped.type == ContextType.CLASS_BODY ||
+                        popped.type == ContextType.METHOD_BODY ||
+                        popped.type == ContextType.CONTROL_FLOW) {
+                        closeIndents.add(popped.indent - 4);
                     }
                 }
-                indentStack.push(curIndent);
 
-            } else if (curIndent < prevIndent) {
-                int popCount = 0;
-                while (indentStack.peek() > curIndent) {
-                    indentStack.pop();
-                    popCount++;
-                }
-
-                if (indentStack.peek() != curIndent) {
+                if (contextStack.peek().indent != curIndent) {
                     throw new PyJaException(currentLine.lineNumber,
                         "Invalid dedent. Indentation does not match any previous level.");
                 }
 
-                currentLine.processedText = repeatString(" ", indentStack.peek()) + repeatString("}", popCount) + "\n" + currentLine.originalText;
+                if (!closeIndents.isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int ind : closeIndents) {
+                        sb.append(repeatString(" ", ind)).append("}\n");
+                    }
+                    currentLine.processedText = sb.toString() + currentLine.originalText;
+                }
+                activeContext = contextStack.peek();
+            }
+
+            // 現在のコンテキストにおけるバリデーションとセクション遷移
+            if (activeContext.type == ContextType.CLASS_BODY) {
+                if (!trimmed.equals("<field>") && !trimmed.equals("<const>") && !trimmed.equals("<method>")) {
+                    throw new PyJaException(currentLine.lineNumber,
+                        "'<field>', '<const>', or '<method>' section is required inside a class body.");
+                }
+
+                int currentOrder = 0;
+                if (trimmed.equals("<field>")) currentOrder = 1;
+                else if (trimmed.equals("<const>")) currentOrder = 2;
+                else if (trimmed.equals("<method>")) currentOrder = 3;
+
+                if (currentOrder <= activeContext.lastSectionOrder) {
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Invalid section order. Sections must be in '<field>' -> '<const>' -> '<method>' order, and cannot be duplicated.");
+                }
+                activeContext.lastSectionOrder = currentOrder;
+
+                ContextType nextSectionType = ContextType.FIELD_SECTION;
+                if (trimmed.equals("<const>")) nextSectionType = ContextType.CONST_SECTION;
+                else if (trimmed.equals("<method>")) nextSectionType = ContextType.METHOD_SECTION;
+
+                currentLine.isSectionHeader = true;
+                contextStack.push(new ContextEntry(nextSectionType, curIndent));
+                activeContext = contextStack.peek();
+            } else if (activeContext.type == ContextType.FIELD_SECTION ||
+                       activeContext.type == ContextType.CONST_SECTION ||
+                       activeContext.type == ContextType.METHOD_SECTION) {
+                
+                // セクション内で別のセクションタグが現れた場合の遷移処理
+                if (trimmed.equals("<field>") || trimmed.equals("<const>") || trimmed.equals("<method>")) {
+                    contextStack.pop(); // 現在のセクションをポップ
+                    activeContext = contextStack.peek(); // CLASS_BODY に戻る
+
+                    // 順序と重複のチェック
+                    int currentOrder = 0;
+                    if (trimmed.equals("<field>")) currentOrder = 1;
+                    else if (trimmed.equals("<const>")) currentOrder = 2;
+                    else if (trimmed.equals("<method>")) currentOrder = 3;
+
+                    if (currentOrder <= activeContext.lastSectionOrder) {
+                        throw new PyJaException(currentLine.lineNumber,
+                            "Invalid section order. Sections must be in '<field>' -> '<const>' -> '<method>' order, and cannot be duplicated.");
+                    }
+                    activeContext.lastSectionOrder = currentOrder;
+
+                    ContextType nextSectionType = ContextType.FIELD_SECTION;
+                    if (trimmed.equals("<const>")) nextSectionType = ContextType.CONST_SECTION;
+                    else if (trimmed.equals("<method>")) nextSectionType = ContextType.METHOD_SECTION;
+
+                    // 新しいセクションをプッシュ
+                    currentLine.isSectionHeader = true;
+                    contextStack.push(new ContextEntry(nextSectionType, curIndent));
+                    activeContext = contextStack.peek();
+                } else {
+                    // 通常行のバリデーション
+                    if (activeContext.type == ContextType.FIELD_SECTION) {
+                        if (!trimmed.equals("cls")) {
+                            if (!hasKeyword(trimmed, "cls") && !hasKeyword(trimmed, "ins")) {
+                                throw new PyJaException(currentLine.lineNumber,
+                                    "Field declaration requires 'cls' or 'ins' keyword.");
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // ファイル末尾の閉じカッコ処理
-        int finalPopCount = 0;
-        while (indentStack.peek() > 0) {
-            indentStack.pop();
-            finalPopCount++;
+        List<Integer> finalCloseIndents = new ArrayList<>();
+        while (contextStack.peek().indent > 0) {
+            ContextEntry popped = contextStack.pop();
+            if (popped.type == ContextType.CLASS_BODY ||
+                popped.type == ContextType.METHOD_BODY ||
+                popped.type == ContextType.CONTROL_FLOW) {
+                finalCloseIndents.add(popped.indent - 4);
+            }
         }
 
         // Java コードへの変換出力
@@ -230,12 +399,16 @@ public class PyJaConverter {
                 continue;
             }
 
+            if (line.isSectionHeader) {
+                output.add(""); // セクションヘッダー行は空行にする
+                continue;
+            }
+
             String text = line.processedText;
             String convertedTrimmed = convertSyntax(line.trimmedText);
 
             if (line.isBlockStart) {
                 if (line.isClsBlock) {
-                    // cls 単独ブロック → static {
                     convertedTrimmed = "static {";
                 } else {
                     convertedTrimmed = convertedTrimmed + " {";
@@ -261,10 +434,8 @@ public class PyJaConverter {
             }
         }
 
-        if (finalPopCount > 0) {
-            for (int i = finalPopCount - 1; i >= 0; i--) {
-                output.add(repeatString("    ", i) + "}");
-            }
+        for (int ind : finalCloseIndents) {
+            output.add(repeatString(" ", ind) + "}");
         }
 
         return output;
@@ -273,9 +444,7 @@ public class PyJaConverter {
     // static の直接使用を禁止
     private static void validateNoDirectStatic(LineInfo line) throws PyJaException {
         String trimmed = line.trimmedText;
-        // import static はOK（Javaの static import）
         if (trimmed.startsWith("import ")) return;
-        // トークン分割して "static" が含まれているかチェック
         String[] tokens = trimmed.split("\\s+");
         for (String token : tokens) {
             if (token.equals("static")) {
@@ -306,10 +475,8 @@ public class PyJaConverter {
 
     // Java 構文への変換
     private static String convertSyntax(String trimmed) {
-        // cls / ins / new の修飾子変換
         trimmed = convertLevelKeywords(trimmed);
 
-        // if / else if / while / for / catch の括弧補完
         if (trimmed.startsWith("if ") && !trimmed.startsWith("if (")) {
             String condition = trimmed.substring(3).trim();
             return "if (" + condition + ")";
@@ -333,21 +500,10 @@ public class PyJaConverter {
         return trimmed;
     }
 
-    /**
-     * PyJa の cls / ins / new キーワードを Java の修飾子に変換する。
-     *
-     * 変換ルール:
-     *   cls → static（に置換）
-     *   ins → 削除
-     *   new → 削除
-     *
-     * トークンを左から右にスキャンし、修飾子位置に現れた場合のみ変換する。
-     * 修飾子位置とは: public/private/protected やその他修飾子が続く位置。
-     */
     private static String convertLevelKeywords(String trimmed) {
         String[] tokens = trimmed.split("\\s+", -1);
         List<String> result = new ArrayList<>();
-        boolean inModifierRegion = true; // 先頭から修飾子が続く領域
+        boolean inModifierRegion = true;
 
         for (int i = 0; i < tokens.length; i++) {
             String token = tokens[i];
@@ -357,13 +513,11 @@ public class PyJaConverter {
                     result.add("static");
                     continue;
                 } else if (token.equals("ins") || (token.equals("new") && isConstructorNew(tokens, i))) {
-                    // ins は削除、new がコンストラクタ文脈なら削除
                     continue;
                 } else if (JAVA_MODIFIERS.contains(token) || token.equals("static")) {
                     result.add(token);
                     continue;
                 } else {
-                    // 修飾子でないトークンが来たら修飾子領域を抜ける
                     inModifierRegion = false;
                     result.add(token);
                 }
@@ -375,13 +529,7 @@ public class PyJaConverter {
         return String.join(" ", result);
     }
 
-    /**
-     * "new" トークンがコンストラクタ宣言の修飾子かどうかを判定する。
-     * コンストラクタ宣言の文脈: 修飾子列の中にある "new" であること。
-     * 式の中の new（例: new Counter()）は inModifierRegion=false の後に来るため除外される。
-     */
     private static boolean isConstructorNew(String[] tokens, int newIndex) {
-        // newIndex より前のトークンが全て修飾子であれば、コンストラクタ宣言の new
         for (int i = 0; i < newIndex; i++) {
             if (!JAVA_MODIFIERS.contains(tokens[i]) && !PYJA_LEVEL_KEYWORDS.contains(tokens[i])) {
                 return false;
@@ -412,8 +560,10 @@ public class PyJaConverter {
         if (trimmed.startsWith("@")) {
             return false;
         }
-        // cls ブロック / static ブロック
         if (trimmed.equals("static") || trimmed.equals("static {") || trimmed.equals("cls")) {
+            return false;
+        }
+        if (trimmed.equals("<field>") || trimmed.equals("<const>") || trimmed.equals("<method>")) {
             return false;
         }
 
@@ -479,5 +629,25 @@ public class PyJaConverter {
                 writer.newLine();
             }
         }
+    }
+
+    private static boolean hasKeyword(String trimmed, String keyword) {
+        String[] tokens = trimmed.split("\\s+");
+        for (String token : tokens) {
+            if (token.equals(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isClassDeclaration(String trimmed) {
+        String[] tokens = trimmed.split("\\s+");
+        for (String token : tokens) {
+            if (token.equals("class") || token.equals("interface") || token.equals("enum")) {
+                return true;
+            }
+        }
+        return false;
     }
 }

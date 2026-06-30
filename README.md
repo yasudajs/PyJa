@@ -10,19 +10,23 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
 
 1.  **インデントによるブロック表現**:
     *   中括弧 `{ }` は不要です。半角スペース4つのインデントの深さでコードの構造（クラス、メソッド、ループ、分岐など）を表現します。
-2.  **セミコロン `;` の自動補完**:
+2.  **セクションタグによる構造化（必須）**:
+    *   クラス（またはインターフェース、enum）の直下には直接メンバーを書くことはできず、必ず `<field>`, `<const>`, `<method>` のセクションタグを記述します。
+    *   セクションタグの記述による**インデントの追加は不要**（クラスと同じレベル）です。
+    *   各セクションは省略可能ですが、記述する場合は必ず **`<field>` -> `<const>` -> `<method>`** の順序でなければなりません（順序違反や重複はコンパイルエラーになります）。
+3.  **セミコロン `;` の自動補完**:
     *   ステートメントの末尾のセミコロンは省略可能です。トランスパイラが自動的に補完します。
-3.  **条件式の括弧 `( )` の省略**:
+4.  **条件式の括弧 `( )` の省略**:
     *   `if` や `for`、`while` などの条件式を囲む括弧 `( )` を省略して書くことができます。
-4.  **丸括弧内での複数行記述**:
+5.  **丸括弧内での複数行記述**:
     *   メソッドの引数リストなど、括弧の内部であれば自由に改行して複数行にわたるコードを書くことができます。
-5.  **厳密なインデント検証**:
+6.  **厳密なインデント検証**:
     *   タブ文字の混入や、4の倍数以外のスペースインデント、不正なデデント（戻りインデント）を検知し、コンパイル前にエラーを出力します。
-6.  **`cls` / `ins` / `new` キーワードによる明示的なメンバー宣言**:
+7.  **`cls` / `ins` / `new` キーワードによる明示的なメンバー宣言**:
     *   Javaの `static` を廃止し、より直感的なキーワードで記述します。
     *   `cls` ：クラスに属するメンバー（Javaの `static` に変換）
     *   `ins` ：インスタンスに属するメンバー（Javaでは修飾子なしに変換）
-    *   `new` ：コンストラクタ（インスタンス生成時に呼ばれるメソッド）
+    *   `new` ：コンストラクタ（インスタンス生成時に呼ばれるメソッド。Javaではクラス名と同名のメソッドに変換）
 
 ---
 
@@ -38,6 +42,7 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
 
 ```java
 class Counter
+<field>
     // クラスフィールド（cls必須）
     private cls int total = 0
 
@@ -48,11 +53,13 @@ class Counter
     // インスタンスフィールド（ins必須）
     private ins int count
 
+<const>
     // コンストラクタ（new必須）
     public new Counter(int start)
         this.count = start
         total++
 
+<method>
     // インスタンスメソッド（ins必須）
     public ins int getCount()
         return count
@@ -110,13 +117,16 @@ import java.util.ArrayList
 import java.util.List
 
 class Sample
+    <method>
     public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")
-        
+
+        // --- 基本的なループ ---
         int limit = 5
         for int i = 0; i < limit; i++
             System.out.println("ループカウンタ: " + i)
-            
+
+        // --- 条件分岐 ---
         int x = 10
         if x > 5
             System.out.println("xは5より大きいです")
@@ -124,8 +134,17 @@ class Sample
                 System.out.println("xはちょうど10です")
         else
             System.out.println("xは5以下です")
-            
-        // 複数行にわたるメソッド呼び出し
+
+        // --- リストの使用例 ---
+        List<String> languages = new ArrayList<>()
+        languages.add("Java")
+        languages.add("Python")
+        languages.add("PyJa")
+
+        for String lang : languages
+            System.out.println("言語: " + lang)
+
+        // --- 複数行にわたるメソッド呼び出し ---
         printMessage(
             "Hello, " +
             "World from PyJa!"
