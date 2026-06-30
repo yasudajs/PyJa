@@ -137,4 +137,8 @@ chmod +x pyjac pyja
 
 ## ライセンス
 
-[MIT License](LICENSE)
+このプロジェクトは **MIT License** のもとで公開されています。利用・改変・再配布にあたっては、著作権表示およびライセンス表示を含める必要があります。
+
+詳細は [LICENSE](LICENSE) ファイルをご覧ください。
+
+Copyright (c) 2026 安田情報システム
