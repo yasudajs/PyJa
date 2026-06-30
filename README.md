@@ -42,6 +42,8 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
 
 ### 記述例
 
+#### クラスの記述例
+
 ```java
 class Counter
 <field>
@@ -69,6 +71,19 @@ class Counter
     // クラスメソッド（cls必須）
     public cls int getTotal()
         return total
+```
+
+#### インターフェースの記述例（`default ins` メソッドの記述例）
+
+```java
+interface Drawable
+<method>
+    // 抽象メソッド（ins必須）
+    public ins void draw()
+
+    // デフォルトメソッド（default ins必須）
+    public default ins void printStatus()
+        System.out.println("Status: OK")
 ```
 
 ---
