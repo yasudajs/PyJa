@@ -1,0 +1,41 @@
+{
+    "name": "pyja-language",
+    "displayName": "PyJa Language Support",
+    "description": "Syntax highlighting and file icon for PyJa (.pyja) files",
+    "version": "0.1.0",
+    "publisher": "yasudajs",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "pyja",
+                "aliases": ["PyJa", "pyja"],
+                "extensions": [".pyja"],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./icons/pyja-icon.png",
+                    "dark": "./icons/pyja-icon.png"
+                }
+            }
+        ],
+        "grammars": [
+            {
+                "language": "pyja",
+                "scopeName": "source.pyja",
+                "path": "./syntaxes/pyja.tmLanguage.json"
+            }
+        ],
+        "iconThemes": [
+            {
+                "id": "pyja-icons",
+                "label": "PyJa File Icons",
+                "path": "./icons/pyja-icon-theme.json"
+            }
+        ]
+    }
+}

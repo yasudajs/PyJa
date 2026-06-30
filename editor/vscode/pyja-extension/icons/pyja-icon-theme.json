@@ -1,0 +1,10 @@
+{
+    "iconDefinitions": {
+        "pyja-icon": {
+            "iconPath": "./pyja-icon.png"
+        }
+    },
+    "fileExtensions": {
+        "pyja": "pyja-icon"
+    }
+}

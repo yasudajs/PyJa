@@ -1,0 +1,29 @@
+{
+    "comments": {
+        "lineComment": "//",
+        "blockComment": ["/*", "*/"]
+    },
+    "brackets": [
+        ["(", ")"],
+        ["[", "]"]
+    ],
+    "autoClosingPairs": [
+        { "open": "(", "close": ")" },
+        { "open": "[", "close": "]" },
+        { "open": "\"", "close": "\"", "notIn": ["string"] },
+        { "open": "'", "close": "'", "notIn": ["string"] }
+    ],
+    "surroundingPairs": [
+        ["(", ")"],
+        ["[", "]"],
+        ["\"", "\""],
+        ["'", "'"]
+    ],
+    "folding": {
+        "offSide": true
+    },
+    "indentationRules": {
+        "increaseIndentPattern": "^\\s*(class|interface|enum|if|else|for|while|do|switch|try|catch|finally|synchronized)\\b.*$|^\\s*(public|private|protected|static|abstract|final|default|native|strictfp|transient|volatile)?\\s*(void|int|long|float|double|boolean|char|byte|short|String|[A-Z]\\w*)\\s+\\w+\\s*\\(.*\\)\\s*$",
+        "decreaseIndentPattern": "^\\s*(else|catch|finally)\\b.*$"
+    }
+}

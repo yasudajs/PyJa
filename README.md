@@ -28,6 +28,36 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
 
 ---
 
+## セットアップ
+
+### 1. リポジトリのクローン
+
+```bash
+git clone https://github.com/yasudajs/PyJa.git
+cd PyJa
+```
+
+### 2. IDE拡張機能のインストール（任意）
+
+VS Code系のIDEをお使いの場合、PyJa専用のシンタックスハイライト（色付け）とファイルアイコンを有効にするための拡張機能をインストールできます。
+
+**Windows:**
+```cmd
+.\install-extension.bat
+```
+
+**macOS / Linux:**
+```bash
+chmod +x install-extension.sh
+./install-extension.sh
+```
+
+インストール後、**IDEを再起動**すると `.pyja` ファイルに色付けとアイコンが適用されます。
+
+> **アンインストール**: 拡張機能を削除する場合は `uninstall-extension.bat`（Windows）または `./uninstall-extension.sh`（macOS/Linux）を実行してください。
+
+---
+
 ## サンプルコード (`Sample.pyja`)
 
 ```java
