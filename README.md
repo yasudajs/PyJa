@@ -253,6 +253,24 @@ public class Sample
         else
             System.out.println("xは5以下です")
 
+        // --- switch文・switch式の使用例 ---
+        int score = 2
+        switch score
+            case 1
+                System.out.println("Score: 1")
+                break
+            case 2
+                System.out.println("Score: 2")
+                break
+            default
+                System.out.println("Score: Other")
+
+        String text = switch score
+            case 1 -> "One"
+            case 2 -> "Two"
+            default -> "Other"
+        System.out.println("Text: " + text)
+
         // --- リストの使用例 ---
         List<String> languages = new ArrayList<>()
         languages.add("Java")

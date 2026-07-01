@@ -62,6 +62,7 @@ public class PyJaConverter {
         ContextType type;
         int indent;
         int lastSectionOrder = 0; // 1: <field>, 2: <const>, 3: <method>, 4: <innercls>
+        boolean needsSemicolonOnClose = false;
 
         ContextEntry(ContextType type, int indent) {
             this.type = type;
@@ -284,13 +285,14 @@ public class PyJaConverter {
             }
 
             if (targetIndent < activeContext.indent) {
-                List<Integer> closeIndents = new ArrayList<>();
+                List<String> closeBraces = new ArrayList<>();
                 while (contextStack.peek().indent > targetIndent) {
                     ContextEntry popped = contextStack.pop();
                     if (popped.type == ContextType.CLASS_BODY ||
                         popped.type == ContextType.METHOD_BODY ||
                         popped.type == ContextType.CONTROL_FLOW) {
-                        closeIndents.add(popped.indent - 4);
+                        String brace = popped.needsSemicolonOnClose ? "};" : "}";
+                        closeBraces.add(repeatString(" ", popped.indent - 4) + brace + "\n");
                     }
                 }
 
@@ -299,10 +301,10 @@ public class PyJaConverter {
                         "Invalid dedent. Indentation does not match any previous level.");
                 }
 
-                if (!closeIndents.isEmpty()) {
+                if (!closeBraces.isEmpty()) {
                     StringBuilder sb = new StringBuilder();
-                    for (int ind : closeIndents) {
-                        sb.append(repeatString(" ", ind)).append("}\n");
+                    for (String cb : closeBraces) {
+                        sb.append(cb);
                     }
                     currentLine.processedText = sb.toString() + currentLine.originalText;
                 }
@@ -379,6 +381,7 @@ public class PyJaConverter {
                     boolean prevIsBlockStart = true;
                     boolean prevIsSectionHeader = false;
                     boolean prevIsClsBlock = false;
+                    boolean needsSemicolonOnClose = false;
 
                     if (activeContext.type == ContextType.GLOBAL) {
                         if (isClassDeclaration(prevTrimmed)) {
@@ -416,6 +419,19 @@ public class PyJaConverter {
                                 "Indentation can only be increased after control flow statements (if, else, for, while, try, catch, finally, switch).");
                         }
                         nextType = ContextType.CONTROL_FLOW;
+
+                        // switch式かどうかの判定（行の中に switch があり、かつ行頭が switch ではない）
+                        String[] tokens = prevTrimmed.split("\\s+");
+                        boolean hasSwitch = false;
+                        for (String token : tokens) {
+                            if (token.equals("switch")) {
+                                hasSwitch = true;
+                                break;
+                            }
+                        }
+                        if (hasSwitch && !tokens[0].equals("switch")) {
+                            needsSemicolonOnClose = true;
+                        }
                     } else {
                         throw new PyJaException(prevLine.lineNumber, "Unexpected block start.");
                     }
@@ -424,7 +440,9 @@ public class PyJaConverter {
                     prevLine.isSectionHeader = prevIsSectionHeader;
                     prevLine.isClsBlock = prevIsClsBlock;
 
-                    contextStack.push(new ContextEntry(nextType, curIndent));
+                    ContextEntry newContext = new ContextEntry(nextType, curIndent);
+                    newContext.needsSemicolonOnClose = needsSemicolonOnClose;
+                    contextStack.push(newContext);
                     activeContext = contextStack.peek();
                 }
             }
@@ -508,13 +526,14 @@ public class PyJaConverter {
         }
 
         // ファイル末尾の閉じカッコ処理
-        List<Integer> finalCloseIndents = new ArrayList<>();
+        List<String> finalCloseBraces = new ArrayList<>();
         while (contextStack.peek().indent > 0) {
             ContextEntry popped = contextStack.pop();
             if (popped.type == ContextType.CLASS_BODY ||
                 popped.type == ContextType.METHOD_BODY ||
                 popped.type == ContextType.CONTROL_FLOW) {
-                finalCloseIndents.add(popped.indent - 4);
+                String brace = popped.needsSemicolonOnClose ? "};" : "}";
+                finalCloseBraces.add(repeatString(" ", popped.indent - 4) + brace);
             }
         }
 
@@ -545,7 +564,16 @@ public class PyJaConverter {
                 if (line.isClsBlock) {
                     convertedTrimmed = "static {";
                 } else {
-                    convertedTrimmed = convertedTrimmed + " {";
+                    String trimmedLower = convertedTrimmed.trim();
+                    if (trimmedLower.startsWith("case ") || trimmedLower.equals("default")) {
+                        if (!trimmedLower.endsWith(":")) {
+                            convertedTrimmed = convertedTrimmed + ": {";
+                        } else {
+                            convertedTrimmed = convertedTrimmed + " {";
+                        }
+                    } else {
+                        convertedTrimmed = convertedTrimmed + " {";
+                    }
                 }
             } else {
                 if (line.accumulatedParenBalance == 0 && needsSemicolon(convertedTrimmed)) {
@@ -575,8 +603,8 @@ public class PyJaConverter {
             }
         }
 
-        for (int ind : finalCloseIndents) {
-            output.add(repeatString(" ", ind) + "}");
+        for (String brace : finalCloseBraces) {
+            output.add(brace);
         }
 
         return output;
@@ -616,29 +644,47 @@ public class PyJaConverter {
 
     // Java 構文への変換
     private static String convertSyntax(String trimmed) {
-        trimmed = convertLevelKeywords(trimmed);
+        // コメントの分離
+        String code = trimmed;
+        String comment = "";
+        int commentIdx = trimmed.indexOf("//");
+        if (commentIdx != -1) {
+            code = trimmed.substring(0, commentIdx).trim();
+            comment = trimmed.substring(commentIdx);
+        }
 
-        if (trimmed.startsWith("if ") && !trimmed.startsWith("if (")) {
-            String condition = trimmed.substring(3).trim();
-            return "if (" + condition + ")";
+        code = convertLevelKeywords(code);
+
+        if (code.startsWith("if ") && !code.startsWith("if (")) {
+            String condition = code.substring(3).trim();
+            code = "if (" + condition + ")";
         }
-        if (trimmed.startsWith("else if ") && !trimmed.startsWith("else if (")) {
-            String condition = trimmed.substring(8).trim();
-            return "else if (" + condition + ")";
+        if (code.startsWith("else if ") && !code.startsWith("else if (")) {
+            String condition = code.substring(8).trim();
+            code = "else if (" + condition + ")";
         }
-        if (trimmed.startsWith("while ") && !trimmed.startsWith("while (")) {
-            String condition = trimmed.substring(6).trim();
-            return "while (" + condition + ")";
+        if (code.startsWith("while ") && !code.startsWith("while (")) {
+            String condition = code.substring(6).trim();
+            code = "while (" + condition + ")";
         }
-        if (trimmed.startsWith("for ") && !trimmed.startsWith("for (")) {
-            String loopExpr = trimmed.substring(4).trim();
-            return "for (" + loopExpr + ")";
+        if (code.startsWith("for ") && !code.startsWith("for (")) {
+            String loopExpr = code.substring(4).trim();
+            code = "for (" + loopExpr + ")";
         }
-        if (trimmed.startsWith("catch ") && !trimmed.startsWith("catch (")) {
-            String catchExpr = trimmed.substring(6).trim();
-            return "catch (" + catchExpr + ")";
+        if (code.startsWith("catch ") && !code.startsWith("catch (")) {
+            String catchExpr = code.substring(6).trim();
+            code = "catch (" + catchExpr + ")";
         }
-        return trimmed;
+
+        // switch の括弧補完
+        if (code.contains("switch")) {
+            code = code.replaceAll("(\\bswitch\\s+)([^\\(\\s].*)", "$1($2)");
+        }
+
+        if (!comment.isEmpty()) {
+            return code + " " + comment;
+        }
+        return code;
     }
 
     private static String convertLevelKeywords(String trimmed) {
@@ -852,7 +898,18 @@ public class PyJaConverter {
             return true;
         }
 
-        return CONTROL_FLOW_KEYWORDS.contains(firstWord);
+        if (CONTROL_FLOW_KEYWORDS.contains(firstWord)) {
+            return true;
+        }
+
+        // 行の途中に switch キーワードがある場合も許容する
+        for (String token : tokens) {
+            if (token.equals("switch")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static boolean hasInvalidGreaterOperator(String trimmed) {
