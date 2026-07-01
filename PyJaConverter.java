@@ -835,6 +835,7 @@ public class PyJaConverter {
     }
 
     private static boolean hasKeyword(String trimmed, String keyword) {
+        trimmed = cleanCodeForValidation(trimmed);
         String[] tokens = trimmed.split("\\s+");
         for (String token : tokens) {
             if (token.equals(keyword)) {
@@ -845,6 +846,7 @@ public class PyJaConverter {
     }
 
     private static boolean isClassDeclaration(String trimmed) {
+        trimmed = cleanCodeForValidation(trimmed);
         String[] tokens = trimmed.split("\\s+");
         for (String token : tokens) {
             if (token.equals("class") || token.equals("interface") || token.equals("enum")) {
@@ -855,6 +857,7 @@ public class PyJaConverter {
     }
 
     private static boolean isMethodDeclaration(String trimmed) {
+        trimmed = cleanCodeForValidation(trimmed);
         int parenIdx = trimmed.indexOf('(');
         int equalIdx = trimmed.indexOf('=');
 
@@ -901,6 +904,7 @@ public class PyJaConverter {
     }
 
     private static boolean isControlFlowStatement(String trimmed) {
+        trimmed = cleanCodeForValidation(trimmed);
         String[] tokens = trimmed.split("\\s+");
         if (tokens.length == 0) return false;
 
@@ -1311,5 +1315,45 @@ public class PyJaConverter {
             }
         }
         return lines;
+    }
+
+    private static String cleanCodeForValidation(String text) {
+        StringBuilder sb = new StringBuilder();
+        boolean inString = false;
+        boolean escape = false;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+
+            // 行末コメントの除去
+            if (!inString && c == '/' && i + 1 < text.length() && text.charAt(i + 1) == '/') {
+                break;
+            }
+
+            if (escape) {
+                escape = false;
+                sb.append(' ');
+                continue;
+            }
+
+            if (c == '\\') {
+                escape = true;
+                sb.append(' ');
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                sb.append(' ');
+                continue;
+            }
+
+            if (inString) {
+                sb.append(' ');
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }

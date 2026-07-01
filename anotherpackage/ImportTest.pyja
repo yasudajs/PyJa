@@ -1,0 +1,9 @@
+package anotherpackage
+
+import mypackage.PackageTest
+
+public class ImportTest
+<method>
+    public cls void main(String[] args)
+        System.out.println("Importing PackageTest...")
+        PackageTest.greet()
