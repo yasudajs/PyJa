@@ -1,2 +1,4 @@
 *.class
 Sample.java
+*.java
+!PyJaConverter.java
