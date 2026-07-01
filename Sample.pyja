@@ -11,6 +11,19 @@ public class Sample
         for int i = 0; i < limit; i++
             System.out.println("ループカウンタ: " + i)
 
+        // --- while文 ---
+        int w = 0
+        while w < limit
+            System.out.println("whileカウンタ: " + w)
+            w++
+
+        // --- do-while文 ---
+        int d = 0
+        do
+            System.out.println("do-whileカウンタ: " + d)
+            d++
+        while d < limit
+
         // --- 条件分岐 ---
         int x = 10
         if 5 < x
