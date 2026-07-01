@@ -1,8 +1,8 @@
 @echo off
 if "%~1"=="" goto error
-java "%~dp0PyJaConverter.java" "%~1"
+java "%~dp0src\PyJaConverter.java" "%~1"
 if errorlevel 1 exit /b 1
-javac "%~dpn1.java"
+javac -cp "%~dp1." -sourcepath "%~dp1." "%~dpn1.java"
 if errorlevel 1 exit /b 1
 goto end
 :error

@@ -9,7 +9,7 @@ fi
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # トランスパイル実行
-java "$DIR/PyJaConverter.java" "$1"
+java "$DIR/src/PyJaConverter.java" "$1"
 if [ $? -ne 0 ]; then
     exit 1
 fi
@@ -20,7 +20,7 @@ filename=$(basename -- "$1")
 classname="${filename%.*}"
 
 # javacでコンパイル
-javac "$filepath/$classname.java"
+javac -cp "$filepath" -sourcepath "$filepath" "$filepath/$classname.java"
 if [ $? -ne 0 ]; then
     exit 1
 fi
