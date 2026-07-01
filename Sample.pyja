@@ -60,6 +60,11 @@ public class Sample
         for String lang : languages
             System.out.println("言語: " + lang)
 
+        // --- 複数行にわたる文字列結合（括弧で囲む） ---
+        String nonTextBlockStr = ("You\'re"
+            + "\n" + "nice" + "\n" + "Engineer!")
+        System.out.println(nonTextBlockStr)
+
         // --- 複数行にわたるメソッド呼び出し ---
         printMessage(
             "Hello, " +
