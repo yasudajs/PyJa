@@ -13,7 +13,7 @@ class Sample
 
         // --- 条件分岐 ---
         int x = 10
-        if x > 5
+        if 5 < x
             System.out.println("xは5より大きいです")
             if x == 10
                 System.out.println("xはちょうど10です")

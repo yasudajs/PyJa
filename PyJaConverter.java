@@ -212,6 +212,12 @@ public class PyJaConverter {
             // cls と ins の同時使用チェック
             validateNoDualLevelKeyword(currentLine);
 
+            // 比較演算子のチェック（import行は除外）
+            if (!trimmed.startsWith("import ") && hasInvalidGreaterOperator(trimmed)) {
+                throw new PyJaException(currentLine.lineNumber,
+                    "Invalid comparison operator '>'. Use '<' or '<=' instead and put the smaller value on the left side.");
+            }
+
             ContextEntry activeContext = contextStack.peek();
 
             // 1. クラス宣言の次の行で、自動的に CLASS_BODY コンテキストに入る (インデントは変わらない)
@@ -760,5 +766,33 @@ public class PyJaConverter {
         }
 
         return CONTROL_FLOW_KEYWORDS.contains(firstWord);
+    }
+
+    private static boolean hasInvalidGreaterOperator(String trimmed) {
+        // 1. ラムダ式 '->' を一時的に除外
+        String temp = trimmed.replace("->", "  ");
+        // 2. ビット右シフト '>>', '>>>' を一時的に除外
+        temp = temp.replace(">>>", "   ").replace(">>", "  ");
+
+        // 3. ジェネリクス '<...>' の内部にある '>' をスルー
+        StringBuilder sb = new StringBuilder();
+        int depth = 0;
+        for (int i = 0; i < temp.length(); i++) {
+            char c = temp.charAt(i);
+            if (c == '<') {
+                depth++;
+            } else if (c == '>') {
+                if (depth > 0) {
+                    depth--;
+                } else {
+                    sb.append(c);
+                }
+            } else {
+                if (depth == 0) {
+                    sb.append(c);
+                }
+            }
+        }
+        return sb.toString().contains(">");
     }
 }
