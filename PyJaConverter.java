@@ -739,6 +739,11 @@ public class PyJaConverter {
             return false;
         }
 
+        // ラベル定義行（例: labelName:）の場合はセミコロンを付与しない
+        if (trimmed.endsWith(":") && trimmed.substring(0, trimmed.length() - 1).trim().matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$")) {
+            return false;
+        }
+
         if (isClassDeclaration(trimmed)) {
             return false;
         }

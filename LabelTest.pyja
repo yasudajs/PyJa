@@ -1,0 +1,18 @@
+public class LabelTest
+<method>
+    public cls void main(String[] args)
+        System.out.println("=== Label Break Test ===")
+        outerLoop:
+        for int i = 0; i < 3; i++
+            for int j = 0; j < 3; j++
+                if i == 1 && j == 1
+                    break outerLoop
+                System.out.println("i=" + i + ", j=" + j)
+
+        System.out.println("=== Label Continue Test ===")
+        outerLoop2:
+        for int i = 0; i < 3; i++
+            for int j = 0; j < 3; j++
+                if i == 1 && j == 1
+                    continue outerLoop2
+                System.out.println("i=" + i + ", j=" + j)
