@@ -1,12 +1,15 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 
@@ -25,6 +28,19 @@ public class PyJaConverter {
     private static final Set<String> CONTROL_FLOW_KEYWORDS = new HashSet<>(Arrays.asList(
         "if", "else", "for", "while", "try", "catch", "finally", "switch", "case", "default"
     ));
+
+    // クラス名 -> メンバ定義情報のキャッシュ
+    static class ClassInfo {
+        Set<String> clsMembers = new HashSet<>();
+        Set<String> insMembers = new HashSet<>();
+    }
+    private static final Map<String, ClassInfo> classCache = new HashMap<>();
+
+    // 現在トランスパイル中のファイル内のインポート文リスト
+    private static final List<String> currentImports = new ArrayList<>();
+
+    // 現在のメソッド/クラススコープにおける 変数名 -> 型名 のマッピング
+    private static final Map<String, String> variableTypes = new HashMap<>();
 
     enum ContextType {
         GLOBAL,
@@ -139,7 +155,7 @@ public class PyJaConverter {
                 }
                 line.trimmedText = trimmed;
 
-                // インデントサイズの計算 (セクションタグの強制書き換えは廃止)
+                // インデントサイズの計算
                 int spaces = 0;
                 while (spaces < lineText.length() && lineText.charAt(spaces) == ' ') {
                     spaces++;
@@ -177,6 +193,9 @@ public class PyJaConverter {
         Stack<ContextEntry> contextStack = new Stack<>();
         contextStack.push(new ContextEntry(ContextType.GLOBAL, 0));
 
+        currentImports.clear();
+        variableTypes.clear();
+
         List<Integer> validLineIndices = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             LineInfo line = lines.get(i);
@@ -204,6 +223,15 @@ public class PyJaConverter {
             if (curIndent % 4 != 0) {
                 throw new PyJaException(currentLine.lineNumber,
                     "Incorrect indentation: " + curIndent + " spaces (must be a multiple of 4).");
+            }
+
+            // インポート文の収集
+            if (trimmed.startsWith("import ")) {
+                String impPath = trimmed.substring(7).trim();
+                if (impPath.endsWith(";")) {
+                    impPath = impPath.substring(0, impPath.length() - 1).trim();
+                }
+                currentImports.add(impPath);
             }
 
             // static の直接使用チェック
@@ -235,7 +263,6 @@ public class PyJaConverter {
             int targetIndent = curIndent;
             boolean isSectionTag = trimmed.equals("<field>") || trimmed.equals("<const>") || trimmed.equals("<method>") || trimmed.equals("<innercls>");
             if (isSectionTag) {
-                // セクションタグの場合、最も上に積まれている CLASS_BODY のインデントまでしかポップしない
                 int classIndent = 4;
                 for (int i = contextStack.size() - 1; i >= 0; i--) {
                     if (contextStack.get(i).type == ContextType.CLASS_BODY) {
@@ -326,8 +353,7 @@ public class PyJaConverter {
                 continue;
             }
 
-
-            // 3. インデントが深くなった場合 (ブロックの開始)
+            // 4. インデントが深くなった場合 (ブロックの開始)
             if (curIndent > activeContext.indent) {
                 if (curIndent - activeContext.indent > 4) {
                     throw new PyJaException(currentLine.lineNumber,
@@ -393,7 +419,21 @@ public class PyJaConverter {
                 }
             }
 
-            // 4. 現在のコンテキストにおけるバリデーション
+            // 簡易型トラッキングの更新
+            if (activeContext.type == ContextType.FIELD_SECTION) {
+                trackFieldDeclaration(trimmed);
+            } else if (activeContext.type == ContextType.CONST_SECTION || activeContext.type == ContextType.METHOD_SECTION) {
+                if (isMethodDeclaration(trimmed) || hasKeyword(trimmed, "new")) {
+                    trackMethodArguments(trimmed);
+                }
+            } else if (activeContext.type == ContextType.METHOD_BODY || activeContext.type == ContextType.CONTROL_FLOW) {
+                trackLocalDeclaration(trimmed);
+            }
+
+            // インスタンス経由の cls メンバーアクセス制限チェック
+            validateInstanceClsAccess(currentLine, inputFilePath);
+
+            // 5. 現在のコンテキストにおけるバリデーション
             if (activeContext.type == ContextType.CLASS_BODY) {
                 throw new PyJaException(currentLine.lineNumber,
                     "'<field>', '<const>', '<method>', or '<innercls>' section is required before declaring members.");
@@ -769,12 +809,9 @@ public class PyJaConverter {
     }
 
     private static boolean hasInvalidGreaterOperator(String trimmed) {
-        // 1. ラムダ式 '->' を一時的に除外
         String temp = trimmed.replace("->", "  ");
-        // 2. ビット右シフト '>>', '>>>' を一時的に除外
         temp = temp.replace(">>>", "   ").replace(">>", "  ");
 
-        // 3. ジェネリクス '<...>' の内部にある '>' をスルー
         StringBuilder sb = new StringBuilder();
         int depth = 0;
         for (int i = 0; i < temp.length(); i++) {
@@ -794,5 +831,213 @@ public class PyJaConverter {
             }
         }
         return sb.toString().contains(">");
+    }
+
+    // --- オンデマンド型解決用ヘルパーメソッド ---
+
+    private static String extractClsMemberName(String trimmed) {
+        if (trimmed.equals("cls") || trimmed.equals("ins")) return null;
+
+        String[] tokens = trimmed.split("\\s+");
+        int clsIdx = -1;
+        for (int i = 0; i < tokens.length; i++) {
+            if (tokens[i].equals("cls") || tokens[i].equals("ins")) {
+                clsIdx = i;
+                break;
+            }
+        }
+
+        if (clsIdx == -1 || clsIdx == tokens.length - 1) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = clsIdx + 1; i < tokens.length; i++) {
+            sb.append(tokens[i]).append(" ");
+        }
+        String remaining = sb.toString().trim();
+
+        int equalIdx = remaining.indexOf('=');
+        String namePart = remaining;
+        if (equalIdx != -1) {
+            namePart = remaining.substring(0, equalIdx).trim();
+        }
+
+        int parenIdx = namePart.indexOf('(');
+        if (parenIdx != -1) {
+            namePart = namePart.substring(0, parenIdx).trim();
+        }
+
+        String[] nameTokens = namePart.split("\\s+");
+        if (nameTokens.length > 0) {
+            return nameTokens[nameTokens.length - 1];
+        }
+        return null;
+    }
+
+    private static ClassInfo findClassInfo(String className, String currentFilePath) {
+        if (classCache.containsKey(className)) {
+            return classCache.get(className);
+        }
+
+        File pyjaFile = findPyJaFile(className, currentFilePath);
+        if (pyjaFile == null || !pyjaFile.exists()) {
+            return null;
+        }
+
+        ClassInfo info = new ClassInfo();
+        try (BufferedReader reader = new BufferedReader(new FileReader(pyjaFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+                    continue;
+                }
+
+                if (trimmed.contains(" cls ")) {
+                    String name = extractClsMemberName(trimmed);
+                    if (name != null) {
+                        info.clsMembers.add(name);
+                    }
+                }
+                if (trimmed.contains(" ins ")) {
+                    String name = extractClsMemberName(trimmed);
+                    if (name != null) {
+                        info.insMembers.add(name);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // ignore
+        }
+
+        classCache.put(className, info);
+        return info;
+    }
+
+    private static File findPyJaFile(String className, String currentFilePath) {
+        File currentFile = new File(currentFilePath).getAbsoluteFile();
+        File parentDir = currentFile.getParentFile();
+
+        // 1. 同一ディレクトリから探す
+        if (parentDir != null) {
+            File sameDirFile = new File(parentDir, className + ".pyja");
+            if (sameDirFile.exists()) {
+                return sameDirFile;
+            }
+        }
+
+        // 2. インポート文から探す
+        for (String imp : currentImports) {
+            if (imp.endsWith("." + className)) {
+                String relativePath = imp.replace('.', File.separatorChar) + ".pyja";
+                File impFile = new File(parentDir, relativePath);
+                if (impFile.exists()) {
+                    return impFile;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static void trackFieldDeclaration(String trimmed) {
+        if (trimmed.equals("cls")) return;
+
+        String[] tokens = trimmed.split("\\s+");
+        List<String> remaining = new ArrayList<>();
+        for (String t : tokens) {
+            if (!JAVA_MODIFIERS.contains(t) && !PYJA_LEVEL_KEYWORDS.contains(t) && !t.equals("static")) {
+                remaining.add(t);
+            }
+        }
+        if (remaining.isEmpty()) return;
+
+        String decl = String.join(" ", remaining);
+        int equalIdx = decl.indexOf('=');
+        if (equalIdx != -1) {
+            decl = decl.substring(0, equalIdx).trim();
+        }
+
+        String[] declTokens = decl.split("\\s+");
+        if (declTokens.length >= 2) {
+            String type = declTokens[declTokens.length - 2];
+            String name = declTokens[declTokens.length - 1];
+            int genIdx = type.indexOf('<');
+            if (genIdx != -1) {
+                type = type.substring(0, genIdx).trim();
+            }
+            variableTypes.put(name, type);
+        }
+    }
+
+    private static void trackMethodArguments(String trimmed) {
+        int parenStart = trimmed.indexOf('(');
+        int parenEnd = trimmed.lastIndexOf(')');
+        if (parenStart == -1 || parenEnd == -1 || parenEnd <= parenStart) {
+            return;
+        }
+        String argsStr = trimmed.substring(parenStart + 1, parenEnd).trim();
+        if (argsStr.isEmpty()) return;
+
+        String[] args = argsStr.split(",");
+        for (String arg : args) {
+            String[] tokens = arg.trim().split("\\s+");
+            if (tokens.length >= 2) {
+                String type = tokens[tokens.length - 2];
+                String name = tokens[tokens.length - 1];
+                int genIdx = type.indexOf('<');
+                if (genIdx != -1) {
+                    type = type.substring(0, genIdx).trim();
+                }
+                variableTypes.put(name, type);
+            }
+        }
+    }
+
+    private static void trackLocalDeclaration(String trimmed) {
+        String left = trimmed;
+        int equalIdx = trimmed.indexOf('=');
+        if (equalIdx != -1) {
+            left = trimmed.substring(0, equalIdx).trim();
+        }
+
+        String[] tokens = left.split("\\s+");
+        if (tokens.length == 2) {
+            String type = tokens[0];
+            String name = tokens[1];
+
+            if (Character.isUpperCase(type.charAt(0)) ||
+                Arrays.asList("int", "double", "float", "long", "short", "byte", "char", "boolean").contains(type) ||
+                type.contains("<")) {
+                int genIdx = type.indexOf('<');
+                if (genIdx != -1) {
+                    type = type.substring(0, genIdx).trim();
+                }
+                variableTypes.put(name, type);
+            }
+        }
+    }
+
+    private static void validateInstanceClsAccess(LineInfo line, String currentFilePath) throws PyJaException {
+        String trimmed = line.trimmedText;
+        if (trimmed.startsWith("import ")) return;
+
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\b([a-z_][a-zA-Z0-9_]*)\\.([a-zA-Z0-9_]+)\\b");
+        java.util.regex.Matcher matcher = pattern.matcher(trimmed);
+
+        while (matcher.find()) {
+            String varName = matcher.group(1);
+            String memberName = matcher.group(2);
+
+            if (variableTypes.containsKey(varName)) {
+                String typeName = variableTypes.get(varName);
+                ClassInfo info = findClassInfo(typeName, currentFilePath);
+                if (info != null && info.clsMembers.contains(memberName)) {
+                    throw new PyJaException(line.lineNumber,
+                        "Cannot access class (cls) member '" + memberName + "' via an instance '" + varName + "'. Use class name '" + typeName + "' instead.");
+                }
+            }
+        }
     }
 }
