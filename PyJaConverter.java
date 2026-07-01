@@ -21,6 +21,11 @@ public class PyJaConverter {
     // PyJa 固有の修飾子キーワード
     private static final Set<String> PYJA_LEVEL_KEYWORDS = new HashSet<>(Arrays.asList("cls", "ins", "new"));
 
+    // 制御構文のキーワード
+    private static final Set<String> CONTROL_FLOW_KEYWORDS = new HashSet<>(Arrays.asList(
+        "if", "else", "for", "while", "try", "catch", "finally", "switch", "case", "default"
+    ));
+
     enum ContextType {
         GLOBAL,
         CLASS_BODY,
@@ -364,6 +369,10 @@ public class PyJaConverter {
                         }
                         nextType = ContextType.CLASS_BODY;
                     } else if (activeContext.type == ContextType.METHOD_BODY || activeContext.type == ContextType.CONTROL_FLOW) {
+                        if (!isControlFlowStatement(prevTrimmed)) {
+                            throw new PyJaException(prevLine.lineNumber,
+                                "Indentation can only be increased after control flow statements (if, else, for, while, try, catch, finally, switch).");
+                        }
                         nextType = ContextType.CONTROL_FLOW;
                     } else {
                         throw new PyJaException(prevLine.lineNumber, "Unexpected block start.");
@@ -388,6 +397,19 @@ public class PyJaConverter {
                         throw new PyJaException(currentLine.lineNumber,
                             "Field declaration requires 'cls' or 'ins' keyword.");
                     }
+                    if (isMethodDeclaration(trimmed)) {
+                        throw new PyJaException(currentLine.lineNumber,
+                            "Method declarations are not allowed inside '<field>' section.");
+                    }
+                    if (!isValidFieldDeclaration(trimmed)) {
+                        throw new PyJaException(currentLine.lineNumber,
+                            "Invalid field declaration. Type and variable name are required.");
+                    }
+                }
+            } else if (activeContext.type == ContextType.METHOD_SECTION) {
+                if (!isMethodDeclaration(trimmed)) {
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Only method declarations are allowed inside '<method>' section.");
                 }
             } else if (activeContext.type == ContextType.INNERCLS_SECTION) {
                 if (!isClassDeclaration(trimmed)) {
@@ -673,5 +695,63 @@ public class PyJaConverter {
             }
         }
         return false;
+    }
+
+    private static boolean isMethodDeclaration(String trimmed) {
+        int parenIdx = trimmed.indexOf('(');
+        int equalIdx = trimmed.indexOf('=');
+
+        if (parenIdx == -1) {
+            return false;
+        }
+
+        if (equalIdx != -1 && equalIdx < parenIdx) {
+            return false;
+        }
+
+        if (trimmed.startsWith("if ") || trimmed.startsWith("for ") || trimmed.startsWith("while ") || trimmed.startsWith("catch ") || trimmed.startsWith("else if ")) {
+            return false;
+        }
+        if (isClassDeclaration(trimmed)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean isValidFieldDeclaration(String trimmed) {
+        if (trimmed.equals("cls")) return true;
+
+        String[] tokens = trimmed.split("\\s+");
+        List<String> remainingTokens = new ArrayList<>();
+        for (String token : tokens) {
+            if (!JAVA_MODIFIERS.contains(token) && !PYJA_LEVEL_KEYWORDS.contains(token) && !token.equals("static")) {
+                remainingTokens.add(token);
+            }
+        }
+
+        if (remainingTokens.isEmpty()) return false;
+
+        String remaining = String.join(" ", remainingTokens);
+        String leftSide = remaining;
+        int equalIdx = remaining.indexOf('=');
+        if (equalIdx != -1) {
+            leftSide = remaining.substring(0, equalIdx).trim();
+        }
+
+        String[] leftTokens = leftSide.split("\\s+");
+        return leftTokens.length >= 2;
+    }
+
+    private static boolean isControlFlowStatement(String trimmed) {
+        String[] tokens = trimmed.split("\\s+");
+        if (tokens.length == 0) return false;
+
+        String firstWord = tokens[0];
+        if (firstWord.equals("else")) {
+            return true;
+        }
+
+        return CONTROL_FLOW_KEYWORDS.contains(firstWord);
     }
 }
