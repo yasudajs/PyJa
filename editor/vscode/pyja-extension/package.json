@@ -7,6 +7,10 @@
     "engines": {
         "vscode": "^1.60.0"
     },
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:pyja"
+    ],
     "categories": [
         "Programming Languages"
     ],
@@ -36,6 +40,23 @@
                 "label": "PyJa File Icons",
                 "path": "./icons/pyja-icon-theme.json"
             }
-        ]
+        ],
+        "commands": [
+            {
+                "command": "pyja.run",
+                "title": "PyJa: Run File",
+                "icon": "$(play)"
+            }
+        ],
+        "menus": {
+            "editor/title": [
+                {
+                    "command": "pyja.run",
+                    "when": "resourceLangId == pyja",
+                    "group": "navigation"
+                }
+            ]
+        }
     }
 }
+
