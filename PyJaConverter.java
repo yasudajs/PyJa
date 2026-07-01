@@ -31,7 +31,7 @@ public class PyJaConverter {
 
     // 制御構文のキーワード
     private static final Set<String> CONTROL_FLOW_KEYWORDS = new HashSet<>(Arrays.asList(
-        "if", "else", "for", "while", "try", "catch", "finally", "switch", "case", "default"
+        "if", "else", "for", "while", "try", "catch", "finally", "switch", "case", "default", "do"
     ));
 
     // クラス名 -> メンバ定義情報のキャッシュ
@@ -576,7 +576,7 @@ public class PyJaConverter {
                     }
                 }
             } else {
-                if (line.accumulatedParenBalance == 0 && needsSemicolon(convertedTrimmed)) {
+                if (line.accumulatedParenBalance == 0 && needsSemicolon(convertedTrimmed, line.isBlockStart)) {
                     int commentIdx = convertedTrimmed.indexOf("//");
                     if (commentIdx != -1) {
                         String stmt = convertedTrimmed.substring(0, commentIdx).trim();
@@ -731,7 +731,7 @@ public class PyJaConverter {
     }
 
     // セミコロンを付与すべきか判定
-    private static boolean needsSemicolon(String trimmed) {
+    private static boolean needsSemicolon(String trimmed, boolean isBlockStart) {
         if (trimmed.isEmpty()) return false;
 
         char lastChar = trimmed.charAt(trimmed.length() - 1);
@@ -743,8 +743,14 @@ public class PyJaConverter {
             return false;
         }
         if (trimmed.startsWith("if ") || trimmed.equals("else") || trimmed.startsWith("else ") ||
-            trimmed.startsWith("while ") || trimmed.startsWith("for ") || trimmed.startsWith("switch ")) {
+            trimmed.startsWith("for ") || trimmed.startsWith("switch ")) {
             return false;
+        }
+        if (trimmed.startsWith("while ")) {
+            // isBlockStart が false の場合は do-while の末尾または空ループなので、セミコロンが必要
+            if (isBlockStart) {
+                return false;
+            }
         }
         if (trimmed.startsWith("try") || trimmed.startsWith("catch ") || trimmed.equals("finally") || trimmed.startsWith("finally ")) {
             return false;
