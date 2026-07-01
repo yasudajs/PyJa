@@ -190,7 +190,7 @@ public class PyJaConverter {
                 lines.add(line);
             }
         }
-        return lines;
+        return mergeTryWithResources(lines);
     }
 
     // 2パス目: トランスパイル処理
@@ -1215,5 +1215,96 @@ public class PyJaConverter {
             throw new PyJaException(line.lineNumber, 
                 "Annotation must be written on a single line. Do not write code after the annotation on the same line.");
         }
+    }
+
+    private static List<LineInfo> mergeTryWithResources(List<LineInfo> lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            LineInfo line = lines.get(i);
+            if (line.isEmpty || line.isComment || line.inTripleQuote) continue;
+
+            // trimmedText が "try" 単体である行を検出
+            if (line.trimmedText.equals("try")) {
+                int tryIndent = line.indentSize;
+                int parenStartIdx = -1;
+                
+                // 次の有効な行を探す
+                for (int j = i + 1; j < lines.size(); j++) {
+                    LineInfo nextLine = lines.get(j);
+                    if (nextLine.isEmpty || nextLine.isComment || nextLine.inTripleQuote) continue;
+                    
+                    // インデントが同じで、かつ "(" 単体であるか
+                    if (nextLine.indentSize == tryIndent && nextLine.trimmedText.equals("(")) {
+                        parenStartIdx = j;
+                    }
+                    break; // 最初の有効行をチェックしたらループを抜ける
+                }
+
+                if (parenStartIdx != -1) {
+                    int parenEndIdx = -1;
+                    
+                    // 閉じ括弧 ")" 単体がある行を、同じインデントレベルで探す
+                    for (int j = parenStartIdx + 1; j < lines.size(); j++) {
+                        LineInfo nextLine = lines.get(j);
+                        if (nextLine.isEmpty || nextLine.isComment || nextLine.inTripleQuote) continue;
+                        
+                        if (nextLine.indentSize == tryIndent && nextLine.trimmedText.equals(")")) {
+                            parenEndIdx = j;
+                            break;
+                        }
+                    }
+
+                    if (parenEndIdx != -1) {
+                        StringBuilder mergedText = new StringBuilder();
+                        mergedText.append("try (");
+
+                        // 括弧内の各リソース行を抽出して結合
+                        List<String> resources = new ArrayList<>();
+                        for (int j = parenStartIdx + 1; j < parenEndIdx; j++) {
+                            LineInfo rLine = lines.get(j);
+                            if (rLine.isEmpty || rLine.isComment || rLine.inTripleQuote) continue;
+                            
+                            String content = rLine.trimmedText;
+                            if (!content.isEmpty()) {
+                                resources.add(content);
+                            }
+                        }
+
+                        for (int r = 0; r < resources.size(); r++) {
+                            String res = resources.get(r);
+                            mergedText.append(res);
+                            if (r < resources.size() - 1) {
+                                if (!res.endsWith(";")) {
+                                    mergedText.append("; ");
+                                } else {
+                                    mergedText.append(" ");
+                                }
+                            }
+                        }
+                        mergedText.append(")");
+
+                        // 最初の try 行をマージされたテキストで上書き
+                        line.trimmedText = mergedText.toString();
+                        line.originalText = repeatString(" ", line.indentSize) + line.trimmedText;
+                        line.processedText = line.originalText;
+                        line.parenBalance = 0;
+                        line.accumulatedParenBalance = 0;
+
+                        // 結合された内側の行 (括弧開始行から括弧終了行まで) は空行にする
+                        for (int j = parenStartIdx; j <= parenEndIdx; j++) {
+                            LineInfo innerLine = lines.get(j);
+                            innerLine.isEmpty = true;
+                            innerLine.trimmedText = "";
+                            innerLine.originalText = "";
+                            innerLine.processedText = "";
+                            innerLine.parenBalance = 0;
+                            innerLine.accumulatedParenBalance = 0;
+                        }
+
+                        i = parenEndIdx; // スキャン位置を進める
+                    }
+                }
+            }
+        }
+        return lines;
     }
 }

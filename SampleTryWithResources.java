@@ -1,0 +1,22 @@
+import java.io.BufferedReader;
+import java.io.StringReader;
+
+public class SampleTryWithResources {
+
+    public static void main(String[] args) {
+        System.out.println("=== try-with-resources サンプル ===");
+        
+        // 複数行にわたるリソース定義（末尾のセミコロン不要）
+        try (BufferedReader br1 = new BufferedReader(new StringReader("データ1")); BufferedReader br2 = new BufferedReader(new StringReader("データ2"))) {
+
+
+
+
+            System.out.println("br1 から読込: " + br1.readLine());
+            System.out.println("br2 から読込: " + br2.readLine());
+        }
+        catch (Exception e) {
+            System.out.println("例外が発生しました: " + e.getMessage());
+        }
+    }
+}

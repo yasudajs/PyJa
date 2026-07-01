@@ -1,0 +1,16 @@
+public class SampleTryCatchFinally
+<method>
+    public cls void main(String[] args)
+        System.out.println("=== try-catch-finally サンプル ===")
+        
+        try
+            System.out.println("処理を開始します。")
+            // ゼロ除算を発生させて例外をトリガーします
+            int result = 10 / 0
+            System.out.print(result)
+        catch ArithmeticException e
+            System.out.println("ArithmeticException をキャッチしました: " + e.getMessage())
+        catch Exception e
+            System.out.println("その他の例外をキャッチしました: " + e.getMessage())
+        finally
+            System.out.println("finally ブロックは常に実行されます。")

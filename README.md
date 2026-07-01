@@ -53,6 +53,12 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
     *   オブジェクト指向の原則（クラスとインスタンスの役割の明確な分離）を意識させるため、インスタンス変数（小文字で始まる変数名）を経由したクラスメンバー（`cls`）へのドットアクセス（`.`）を禁止します。
     *   クラスメンバーへのアクセスは、常にクラス名（大文字で始まるクラス名）から直接行う必要があります（例：`Syain.getCount()` は許可されますが、`taro.getCount()` はトランスパイルエラーになります）。
 
+12. **例外処理（try-catch-finally / try-with-resources）**:
+
+    *   Java同様に `try`, `catch`, `finally` ブロックを利用して例外処理を記述できます（中括弧 `{ }` は不要です）。
+    *   `catch` に続く例外定義の丸括弧 `( )` は省略可能です。
+    *   `try-with-resources` によるリソース自動クローズをサポートしています。`try` の直下の行（インデントなし）に `(` を記述し、各リソース宣言を記述したのち、インデントなしの `)` で閉じることで、複数行のリソース宣言が記述可能です（各リソース宣言の末尾のセミコロン `;` は不要です）。
+
 ---
 
 ## PyJaにおけるアクセス修飾子キーワード一覧
@@ -368,6 +374,51 @@ public class Meibo
 
         System.out.println()
         System.out.println("登録社員数: " + Syain.getCount() + "名")
+```
+
+---
+
+## サンプルコード3: 例外処理 (`SampleTryCatchFinally.pyja`, `SampleTryWithResources.pyja`)
+
+### SampleTryCatchFinally.pyja
+```java
+public class SampleTryCatchFinally
+<method>
+    public cls void main(String[] args)
+        System.out.println("=== try-catch-finally サンプル ===")
+        
+        try
+            System.out.println("処理を開始します。")
+            int result = 10 / 0
+            System.out.print(result)
+        catch ArithmeticException e
+            System.out.println("ArithmeticException をキャッチしました: " + e.getMessage())
+        catch Exception e
+            System.out.println("その他の例外をキャッチしました: " + e.getMessage())
+        finally
+            System.out.println("finally ブロックは常に実行されます。")
+```
+
+### SampleTryWithResources.pyja
+```java
+import java.io.BufferedReader
+import java.io.StringReader
+
+public class SampleTryWithResources
+<method>
+    public cls void main(String[] args)
+        System.out.println("=== try-with-resources サンプル ===")
+        
+        // 複数行にわたるリソース定義（末尾のセミコロン不要）
+        try
+        (
+            BufferedReader br1 = new BufferedReader(new StringReader("データ1"))
+            BufferedReader br2 = new BufferedReader(new StringReader("データ2"))
+        )
+            System.out.println("br1 から読込: " + br1.readLine())
+            System.out.println("br2 から読込: " + br2.readLine())
+        catch Exception e
+            System.out.println("例外が発生しました: " + e.getMessage())
 ```
 
 ---
