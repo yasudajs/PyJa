@@ -353,6 +353,10 @@ home class Syain
     // クラスメソッド
     public cls int getCount()
         return count
+
+    @Override
+    public ins String toString()
+        return "Syain{id=" + id + ", name=" + name + ", age=" + age + "}"
 ```
 
 ### Meibo.pyja
@@ -371,6 +375,7 @@ public class Meibo
         System.out.println("--- 社員名簿一覧 ---")
         for (Syain s : list)
             s.printInfo()
+            System.out.println("  toString出力: " + s)
 
         System.out.println()
         System.out.println("登録社員数: " + Syain.getCount() + "名")

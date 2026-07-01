@@ -509,7 +509,7 @@ public class PyJaConverter {
                     }
                 }
             } else if (activeContext.type == ContextType.METHOD_SECTION) {
-                if (!isMethodDeclaration(trimmed)) {
+                if (!trimmed.startsWith("@") && !isMethodDeclaration(trimmed)) {
                     throw new PyJaException(currentLine.lineNumber,
                         "Only method declarations are allowed inside '<method>' section.");
                 }

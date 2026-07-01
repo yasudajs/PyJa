@@ -1,0 +1,6 @@
+public class CastTest
+<method>
+    public cls void main(String[] args)
+        int total = 10 + 20 + 30 + 40 + 50
+        double average = (double) total / 5
+        System.out.println("平均値 = " + average)

@@ -23,3 +23,8 @@ home class Syain
     // クラスメソッド
     public cls int getCount()
         return count
+
+    @Override
+    public ins String toString()
+        return "Syain{id=" + id + ", name=" + name + ", age=" + age + "}"
+
