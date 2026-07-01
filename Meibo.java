@@ -1,0 +1,20 @@
+import java.util.ArrayList;
+import java.util.List;
+
+class Meibo {
+
+    public static void main(String[] args) {
+        List<Syain> list = new ArrayList<>();
+        list.add(new Syain(1, "山田太郎", 30));
+        list.add(new Syain(2, "佐藤花子", 25));
+        list.add(new Syain(3, "鈴木一郎", 40));
+
+        System.out.println("--- 社員名簿一覧 ---");
+        for (Syain s : list) {
+            s.printInfo();
+
+        }
+        System.out.println();
+        System.out.println("登録社員数: " + Syain.getCount() + "名");
+    }
+}

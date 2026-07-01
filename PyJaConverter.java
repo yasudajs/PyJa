@@ -461,7 +461,14 @@ public class PyJaConverter {
                 }
             } else {
                 if (line.accumulatedParenBalance == 0 && needsSemicolon(convertedTrimmed)) {
-                    convertedTrimmed = convertedTrimmed + ";";
+                    int commentIdx = convertedTrimmed.indexOf("//");
+                    if (commentIdx != -1) {
+                        String stmt = convertedTrimmed.substring(0, commentIdx).trim();
+                        String comment = convertedTrimmed.substring(commentIdx);
+                        convertedTrimmed = stmt + ";" + (comment.isEmpty() ? "" : " " + comment);
+                    } else {
+                        convertedTrimmed = convertedTrimmed + ";";
+                    }
                 }
             }
 

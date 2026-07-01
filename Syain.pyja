@@ -1,0 +1,25 @@
+class Syain
+<field>
+    // クラス変数（登録された総社員数）
+    private cls int count = 0
+
+    // インスタンス変数
+    private ins int id
+    private ins String name
+    private ins int age
+
+<const>
+    public new Syain(int id, String name, int age)
+        this.id = id
+        this.name = name
+        this.age = age
+        count++ // インスタンス生成時にカウントアップ
+
+<method>
+    // インスタンスメソッド
+    public ins void printInfo()
+        System.out.println("社員番号: " + id + ", 名前: " + name + ", 年齢: " + age)
+
+    // クラスメソッド
+    public cls int getCount()
+        return count

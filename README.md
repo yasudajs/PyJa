@@ -197,6 +197,62 @@ class Sample
 
 ---
 
+## サンプルコード2: オブジェクト指向と複数クラス (`Syain.pyja`, `Meibo.pyja`)
+
+PyJaのオブジェクト指向表現（`cls` クラス変数/メソッド、`ins` インスタンス変数/メソッド、`new` コンストラクタ）と、複数ファイルが連携する事例です。
+
+### Syain.pyja
+```java
+class Syain
+<field>
+    // クラス変数（登録された総社員数）
+    private cls int count = 0
+
+    // インスタンス変数
+    private ins int id
+    private ins String name
+    private ins int age
+
+<const>
+    public new Syain(int id, String name, int age)
+        this.id = id
+        this.name = name
+        this.age = age
+        count++ // インスタンス生成時にカウントアップ
+
+<method>
+    // インスタンスメソッド
+    public ins void printInfo()
+        System.out.println("社員番号: " + id + ", 名前: " + name + ", 年齢: " + age)
+
+    // クラスメソッド
+    public cls int getCount()
+        return count
+```
+
+### Meibo.pyja
+```java
+import java.util.ArrayList
+import java.util.List
+
+class Meibo
+<method>
+    public cls void main(String[] args)
+        List<Syain> list = new ArrayList<>()
+        list.add(new Syain(1, "山田太郎", 30))
+        list.add(new Syain(2, "佐藤花子", 25))
+        list.add(new Syain(3, "鈴木一郎", 40))
+
+        System.out.println("--- 社員名簿一覧 ---")
+        for (Syain s : list)
+            s.printInfo()
+
+        System.out.println()
+        System.out.println("登録社員数: " + Syain.getCount() + "名")
+```
+
+---
+
 ## 使い方
 
 ### Windows の場合
@@ -208,11 +264,22 @@ class Sample
 .\pyjac.bat Sample.pyja
 ```
 
+複数ファイルからなるプログラム（例：`Syain`/`Meibo`）をコンパイルする場合は、依存される（呼び出される）クラスから順に個別にコンパイルします。
+```cmd
+.\pyjac.bat Syain.pyja
+.\pyjac.bat Meibo.pyja
+```
+
 #### 2. プログラムの実行
 `pyja.bat` を使用して、生成されたクラスファイルを実行します。
 
 ```cmd
 .\pyja.bat Sample
+```
+
+複数ファイルの場合は、`main` メソッドがある実行クラスを指定して実行します。
+```cmd
+.\pyja.bat Meibo
 ```
 
 ---
@@ -231,11 +298,22 @@ chmod +x pyjac pyja
 ./pyjac Sample.pyja
 ```
 
+複数ファイルの場合は順に個別にコンパイルします。
+```bash
+./pyjac Syain.pyja
+./pyjac Meibo.pyja
+```
+
 #### 2. プログラムの実行
 `pyja` を使用して実行します。
 
 ```bash
 ./pyja Sample
+```
+
+複数ファイルの場合は、`main` メソッドがある実行クラスを指定して実行します。
+```bash
+./pyja Meibo
 ```
 
 ---
