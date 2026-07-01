@@ -1,7 +1,7 @@
 import java.util.ArrayList;
 import java.util.List;
 
-class Meibo {
+public class Meibo {
 
     public static void main(String[] args) {
         List<Syain> list = new ArrayList<>();

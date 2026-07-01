@@ -1,7 +1,7 @@
 import java.util.ArrayList
 import java.util.List
 
-class Sample
+public class Sample
 <method>
     public cls void main(String[] args)
         System.out.println("--- PyJa 動作テスト ---")

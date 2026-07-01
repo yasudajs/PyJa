@@ -21,6 +21,11 @@ public class PyJaConverter {
         "abstract", "final", "synchronized", "volatile", "transient", "native", "strictfp", "default"
     ));
 
+    // PyJa のアクセス修飾子
+    private static final Set<String> PYJA_ACCESS_MODIFIERS = new HashSet<>(Arrays.asList(
+        "public", "private", "family", "package"
+    ));
+
     // PyJa 固有の修飾子キーワード
     private static final Set<String> PYJA_LEVEL_KEYWORDS = new HashSet<>(Arrays.asList("cls", "ins", "new"));
 
@@ -234,6 +239,11 @@ public class PyJaConverter {
                 currentImports.add(impPath);
             }
 
+            // アノテーション行の単独行チェック
+            if (trimmed.startsWith("@")) {
+                validateAnnotationLine(currentLine);
+            }
+
             // static の直接使用チェック
             validateNoDirectStatic(currentLine);
 
@@ -433,6 +443,34 @@ public class PyJaConverter {
             // インスタンス経由の cls メンバーアクセス制限チェック
             validateInstanceClsAccess(currentLine, inputFilePath);
 
+            // アクセス修飾子必須のバリデーション
+            boolean requiresAccessModifier = false;
+            if (activeContext.type == ContextType.GLOBAL || activeContext.type == ContextType.INNERCLS_SECTION) {
+                if (isClassDeclaration(trimmed)) {
+                    requiresAccessModifier = true;
+                }
+            } else if (activeContext.type == ContextType.FIELD_SECTION) {
+                if (!trimmed.equals("cls")) {
+                    requiresAccessModifier = true;
+                }
+            } else if (activeContext.type == ContextType.CONST_SECTION) {
+                if (isMethodDeclaration(trimmed) || hasKeyword(trimmed, "new")) {
+                    requiresAccessModifier = true;
+                }
+            } else if (activeContext.type == ContextType.METHOD_SECTION) {
+                if (isMethodDeclaration(trimmed)) {
+                    requiresAccessModifier = true;
+                }
+            }
+
+            if (requiresAccessModifier && !trimmed.startsWith("@")) {
+                String[] tokens = trimmed.split("\\s+");
+                if (tokens.length == 0 || !PYJA_ACCESS_MODIFIERS.contains(tokens[0])) {
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Access modifier (public, private, family, package) is required at the start of the declaration.");
+                }
+            }
+
             // 5. 現在のコンテキストにおけるバリデーション
             if (activeContext.type == ContextType.CLASS_BODY) {
                 throw new PyJaException(currentLine.lineNumber,
@@ -613,6 +651,11 @@ public class PyJaConverter {
                     continue;
                 } else if (token.equals("ins") || (token.equals("new") && isConstructorNew(tokens, i))) {
                     continue;
+                } else if (token.equals("family")) {
+                    result.add("protected");
+                    continue;
+                } else if (token.equals("package")) {
+                    continue;
                 } else if (JAVA_MODIFIERS.contains(token) || token.equals("static")) {
                     result.add(token);
                     continue;
@@ -630,7 +673,7 @@ public class PyJaConverter {
 
     private static boolean isConstructorNew(String[] tokens, int newIndex) {
         for (int i = 0; i < newIndex; i++) {
-            if (!JAVA_MODIFIERS.contains(tokens[i]) && !PYJA_LEVEL_KEYWORDS.contains(tokens[i])) {
+            if (!JAVA_MODIFIERS.contains(tokens[i]) && !PYJA_LEVEL_KEYWORDS.contains(tokens[i]) && !PYJA_ACCESS_MODIFIERS.contains(tokens[i])) {
                 return false;
             }
         }
@@ -646,7 +689,7 @@ public class PyJaConverter {
             return false;
         }
 
-        if (trimmed.startsWith("class ") || trimmed.startsWith("interface ") || trimmed.startsWith("enum ")) {
+        if (isClassDeclaration(trimmed)) {
             return false;
         }
         if (trimmed.startsWith("if ") || trimmed.equals("else") || trimmed.startsWith("else ") ||
@@ -778,7 +821,7 @@ public class PyJaConverter {
         String[] tokens = trimmed.split("\\s+");
         List<String> remainingTokens = new ArrayList<>();
         for (String token : tokens) {
-            if (!JAVA_MODIFIERS.contains(token) && !PYJA_LEVEL_KEYWORDS.contains(token) && !token.equals("static")) {
+            if (!JAVA_MODIFIERS.contains(token) && !PYJA_LEVEL_KEYWORDS.contains(token) && !token.equals("static") && !PYJA_ACCESS_MODIFIERS.contains(token)) {
                 remainingTokens.add(token);
             }
         }
@@ -947,7 +990,7 @@ public class PyJaConverter {
         String[] tokens = trimmed.split("\\s+");
         List<String> remaining = new ArrayList<>();
         for (String t : tokens) {
-            if (!JAVA_MODIFIERS.contains(t) && !PYJA_LEVEL_KEYWORDS.contains(t) && !t.equals("static")) {
+            if (!JAVA_MODIFIERS.contains(t) && !PYJA_LEVEL_KEYWORDS.contains(t) && !t.equals("static") && !PYJA_ACCESS_MODIFIERS.contains(t)) {
                 remaining.add(t);
             }
         }
@@ -1038,6 +1081,72 @@ public class PyJaConverter {
                         "Cannot access class (cls) member '" + memberName + "' via an instance '" + varName + "'. Use class name '" + typeName + "' instead.");
                 }
             }
+        }
+    }
+
+    private static void validateAnnotationLine(LineInfo line) throws PyJaException {
+        String trimmed = line.trimmedText;
+        if (!trimmed.startsWith("@")) return;
+
+        // アノテーション名部分（@の直後から、英数字・ドット・アンダースコアが続く部分）を取得
+        int idx = 1;
+        while (idx < trimmed.length()) {
+            char c = trimmed.charAt(idx);
+            if (Character.isLetterOrDigit(c) || c == '_' || c == '.') {
+                idx++;
+            } else {
+                break;
+            }
+        }
+
+        // アノテーション名の直後にある文字を調べる（スペースはスキップ）
+        int nextCharIdx = idx;
+        while (nextCharIdx < trimmed.length() && Character.isWhitespace(trimmed.charAt(nextCharIdx))) {
+            nextCharIdx++;
+        }
+
+        if (nextCharIdx == trimmed.length()) {
+            // アノテーション名だけで行が終わっている（例: @Override） -> OK
+            return;
+        }
+
+        char nextChar = trimmed.charAt(nextCharIdx);
+        if (nextChar == '(') {
+            // 括弧付きのアノテーション（例: @SuppressWarnings("unchecked")）
+            // 対応する閉じ括弧を探す
+            int balance = 0;
+            int closeParenIdx = -1;
+            boolean inString = false;
+            boolean escape = false;
+            for (int i = nextCharIdx; i < trimmed.length(); i++) {
+                char c = trimmed.charAt(i);
+                if (escape) { escape = false; continue; }
+                if (c == '\\') { escape = true; continue; }
+                if (c == '"') { inString = !inString; continue; }
+                if (!inString) {
+                    if (c == '(') balance++;
+                    else if (c == ')') {
+                        balance--;
+                        if (balance == 0) {
+                            closeParenIdx = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (closeParenIdx == -1) {
+                throw new PyJaException(line.lineNumber, "Mismatched parentheses in annotation.");
+            }
+            // 閉じ括弧の後にスペース以外の文字があればエラー
+            String trailing = trimmed.substring(closeParenIdx + 1).trim();
+            if (!trailing.isEmpty()) {
+                throw new PyJaException(line.lineNumber, 
+                    "Annotation must be written on a single line. Do not write code after the annotation on the same line.");
+            }
+        } else {
+            // 括弧がないアノテーション（例: @Override）なのに、直後に何か文字がある -> エラー
+            throw new PyJaException(line.lineNumber, 
+                "Annotation must be written on a single line. Do not write code after the annotation on the same line.");
         }
     }
 }
