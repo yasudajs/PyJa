@@ -1,0 +1,9 @@
+public class TextBlockTest
+<method>
+    public cls void main(String[] args)
+        String textBlockStr = """
+            "You're"
+            nice
+            "Engineer!"
+        """
+        System.out.println(textBlockStr)
