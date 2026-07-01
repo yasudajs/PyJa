@@ -23,7 +23,7 @@ public class PyJaConverter {
 
     // PyJa のアクセス修飾子
     private static final Set<String> PYJA_ACCESS_MODIFIERS = new HashSet<>(Arrays.asList(
-        "public", "private", "family", "package"
+        "public", "private", "family", "home"
     ));
 
     // PyJa 固有の修飾子キーワード
@@ -467,7 +467,7 @@ public class PyJaConverter {
                 String[] tokens = trimmed.split("\\s+");
                 if (tokens.length == 0 || !PYJA_ACCESS_MODIFIERS.contains(tokens[0])) {
                     throw new PyJaException(currentLine.lineNumber,
-                        "Access modifier (public, private, family, package) is required at the start of the declaration.");
+                        "Access modifier (public, private, family, home) is required at the start of the declaration.");
                 }
             }
 
@@ -654,7 +654,7 @@ public class PyJaConverter {
                 } else if (token.equals("family")) {
                     result.add("protected");
                     continue;
-                } else if (token.equals("package")) {
+                } else if (token.equals("home")) {
                     continue;
                 } else if (JAVA_MODIFIERS.contains(token) || token.equals("static")) {
                     result.add(token);

@@ -1,4 +1,4 @@
-package class Syain
+home class Syain
 <field>
     // クラス変数（登録された総社員数）
     private cls int count = 0
