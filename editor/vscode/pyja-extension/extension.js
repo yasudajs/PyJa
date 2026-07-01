@@ -19,11 +19,15 @@ function activate(context) {
         document.save().then(() => {
             const filePath = document.fileName;
             const fileDir = path.dirname(filePath);
-            const fileNameWithoutExt = path.basename(filePath, '.pyja');
 
             // ワークスペースフォルダを検索
             const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
             const projectRoot = workspaceFolder ? workspaceFolder.uri.fsPath : fileDir;
+
+            // プロジェクトルートからの相対パスから完全修飾クラス名 (FQCN) を計算
+            const relativePath = path.relative(projectRoot, filePath);
+            const relativePathWithoutExt = relativePath.slice(0, -path.extname(relativePath).length);
+            const fqcn = relativePathWithoutExt.replace(/[\\/]/g, '.');
 
             const isWindows = process.platform === 'win32';
             let terminalCmd = '';
@@ -33,14 +37,13 @@ function activate(context) {
                 const pyjacPath = path.join(projectRoot, 'pyjac.bat');
                 const pyjaPath = path.join(projectRoot, 'pyja.bat');
                 
-                // cmd.exeで実行するコマンド全体。cd して、pyjac.bat でコンパイルし、pyja.bat で実行する。
-                // 確実に実行できるように cmd.exe のターミナルを起動する前提。
-                terminalCmd = `cd /d "${fileDir}" && "${pyjacPath}" "${filePath}" && "${pyjaPath}" ${fileNameWithoutExt}`;
+                // プロジェクトルートディレクトリに移動し、FQCNを指定して実行する
+                terminalCmd = `cd /d "${projectRoot}" && "${pyjacPath}" "${filePath}" && "${pyjaPath}" ${fqcn}`;
             } else {
                 // macOS / Linux環境の場合
                 const pyjacPath = path.join(projectRoot, 'pyjac');
                 const pyjaPath = path.join(projectRoot, 'pyja');
-                terminalCmd = `cd "${fileDir}" && "${pyjacPath}" "${filePath}" && "${pyjaPath}" ${fileNameWithoutExt}`;
+                terminalCmd = `cd "${projectRoot}" && "${pyjacPath}" "${filePath}" && "${pyjaPath}" ${fqcn}`;
             }
 
             // "PyJa Run" という名前のターミナルを探す、または新規作成
