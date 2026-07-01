@@ -86,7 +86,7 @@
                 },
                 {
                     "name": "keyword.control.section.pyja",
-                    "match": "\\b(field|const|method)\\b"
+                    "match": "\\b(field|const|method|innercls)\\b"
                 }
             ]
         },

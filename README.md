@@ -13,9 +13,9 @@ PyJaは、Javaをベースに、Pythonのようなインデントによる構造
 1.  **インデントによるブロック表現**:
     *   中括弧 `{ }` は不要です。半角スペース4つのインデントの深さでコードの構造（クラス、メソッド、ループ、分岐など）を表現します。
 2.  **セクションタグによる構造化（必須）**:
-    *   クラス（またはインターフェース、enum）の直下には直接メンバーを書くことはできず、必ず `<field>`, `<const>`, `<method>` のセクションタグを記述します。
+    *   クラス（またはインターフェース、enum）の直下には直接メンバーを書くことはできず、必ず `<field>`, `<const>`, `<method>`, `<innercls>` のセクションタグを記述します。
     *   セクションタグの記述による**インデントの追加は不要**（クラスと同じレベル）です。
-    *   各セクションは省略可能ですが、記述する場合は必ず **`<field>` -> `<const>` -> `<method>`** の順序でなければなりません（順序違反や重複はコンパイルエラーになります）。
+    *   各セクションは省略可能ですが、記述する場合は必ず **`<field>` -> `<const>` -> `<method>` -> `<innercls>`** の順序でなければなりません（順序違反や重複はコンパイルエラーになります）。
 3.  **セミコロン `;` の自動補完**:
     *   ステートメントの末尾のセミコロンは省略可能です。トランスパイラが自動的に補完します。
 4.  **条件式の括弧 `( )` の省略**:
@@ -84,6 +84,30 @@ interface Drawable
     // デフォルトメソッド（default ins必須）
     public default ins void printStatus()
         System.out.println("Status: OK")
+```
+
+#### ネストクラス（内部クラス）の記述例
+
+```java
+class Outer
+<field>
+    private ins String name
+
+<const>
+    public new Outer()
+        this.name = "Default"
+
+<method>
+    public ins void print()
+        System.out.println(name)
+
+<innercls>
+    public cls class InnerHelper
+    <field>
+        private ins int id
+    <method>
+        public ins void help()
+            System.out.println("Inner helper id: " + id)
 ```
 
 ---
