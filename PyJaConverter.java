@@ -500,6 +500,10 @@ public class PyJaConverter {
                     throw new PyJaException(currentLine.lineNumber,
                         "Only class, interface, or enum declarations are allowed inside '<innercls>' section.");
                 }
+                if (!hasKeyword(trimmed, "cls") && !hasKeyword(trimmed, "ins")) {
+                    throw new PyJaException(currentLine.lineNumber,
+                        "Inner class, interface, or enum declaration requires 'cls' or 'ins' keyword.");
+                }
             }
         }
 
