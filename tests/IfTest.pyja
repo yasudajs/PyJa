@@ -1,0 +1,13 @@
+public class IfTest
+<method>
+    public cls void main(String[] args)
+        int x = 10
+        if 5 < x
+            System.out.println("xは5より大きいです")
+        else
+            System.out.println("xは5以下です")
+
+        // 比較演算子の制限のテスト（< および <= のみ）
+        int y = 5
+        if 0 <= y && y <= 10
+            System.out.println("yは0以上10以下です")
