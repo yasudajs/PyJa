@@ -94,7 +94,7 @@
             "patterns": [
                 {
                     "name": "storage.modifier.pyja",
-                    "match": "\\b(public|private|protected|static|final|abstract|synchronized|volatile|transient|native|strictfp|default|cls|ins|new)\\b"
+                    "match": "\\b(public|private|protected|static|final|abstract|synchronized|volatile|transient|native|strictfp|default|cls|ins|new|family|home)\\b"
                 }
             ]
         },
