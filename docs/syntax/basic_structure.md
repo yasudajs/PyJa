@@ -29,21 +29,24 @@ PyJaでは、Javaのクラスやその他の構造（インターフェース、
 クラス宣言には、アクセス修飾子（`public` など）が必須です。
 
 ```java
-public class Syain
+public class Hello
 <field>
-    private ins int id
-    private ins String name
+    private ins String message
 
 <const>
-    public new Syain(int id, String name)
-        this.id = id
-        this.name = name
+    public new Hello(String message)
+        this.message = message
 
 <method>
-    public ins void printInfo()
-        System.out.println("ID: " + id + ", Name: " + name)
+    public ins void greet()
+        System.out.println(message)
+        
+<innercls>
+    public cls class Inner
+    <method>
+        public ins void hello()
+            System.out.println("Hello from Inner!")
 ```
-* 関連コード: [Syain.pyja](../../samples/Syain.pyja)
 
 ### 2.2. インターフェース (Interface)
 インターフェースも同様にセクションタグを使用して構造化します。
