@@ -50,6 +50,7 @@ public class PyJaConverter {
     enum ContextType {
         GLOBAL,
         CLASS_BODY,
+        ENUM_BODY,
         FIELD_SECTION,
         CONST_SECTION,
         METHOD_SECTION,
@@ -264,7 +265,9 @@ public class PyJaConverter {
                 int prevIdx = validLineIndices.get(k - 1);
                 LineInfo prevLine = lines.get(prevIdx);
                 if (isClassDeclaration(prevLine.trimmedText)) {
-                    contextStack.push(new ContextEntry(ContextType.CLASS_BODY, curIndent + 4));
+                    boolean isEnum = hasKeyword(prevLine.trimmedText, "enum");
+                    ContextType nextCtx = isEnum ? ContextType.ENUM_BODY : ContextType.CLASS_BODY;
+                    contextStack.push(new ContextEntry(nextCtx, prevLine.indentSize + 4));
                     prevLine.isBlockStart = true;
                     activeContext = contextStack.peek();
                 }
@@ -289,6 +292,7 @@ public class PyJaConverter {
                 while (contextStack.peek().indent > targetIndent) {
                     ContextEntry popped = contextStack.pop();
                     if (popped.type == ContextType.CLASS_BODY ||
+                        popped.type == ContextType.ENUM_BODY ||
                         popped.type == ContextType.METHOD_BODY ||
                         popped.type == ContextType.CONTROL_FLOW) {
                         String brace = popped.needsSemicolonOnClose ? "};" : "}";
@@ -493,6 +497,8 @@ public class PyJaConverter {
             if (activeContext.type == ContextType.CLASS_BODY) {
                 throw new PyJaException(currentLine.lineNumber,
                     "'<field>', '<const>', '<method>', or '<innercls>' section is required before declaring members.");
+            } else if (activeContext.type == ContextType.ENUM_BODY) {
+                // ENUM_BODY内ではセクションタグや修飾子の強制をスキップ
             } else if (activeContext.type == ContextType.FIELD_SECTION) {
                 if (!trimmed.equals("cls")) {
                     if (!hasKeyword(trimmed, "cls") && !hasKeyword(trimmed, "ins")) {
@@ -530,6 +536,7 @@ public class PyJaConverter {
         while (contextStack.peek().indent > 0) {
             ContextEntry popped = contextStack.pop();
             if (popped.type == ContextType.CLASS_BODY ||
+                popped.type == ContextType.ENUM_BODY ||
                 popped.type == ContextType.METHOD_BODY ||
                 popped.type == ContextType.CONTROL_FLOW) {
                 String brace = popped.needsSemicolonOnClose ? "};" : "}";

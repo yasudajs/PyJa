@@ -1,0 +1,9 @@
+home enum Role
+    ADMIN, USER, GUEST
+
+public class EnumTest
+<method>
+    public cls void main(String[] args)
+        System.out.println("Role: " + Role.ADMIN)
+        System.out.println("Role: " + Role.USER)
+        System.out.println("Role: " + Role.GUEST)
